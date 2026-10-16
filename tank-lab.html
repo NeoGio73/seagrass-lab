@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Seagrass Tank Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: companion to the lagoon simulator. Protocol console on the left; greenhouse, dosing sheet and analysis bench on the right. */
+:root {
+  --bg: #edf1ed; --surface: #fbfcfa; --surface-2: #e3eae5; --ink: #13251e; --muted: #56685f; --line: #ccd8d0;
+  --grass: #2b7547; --water: #1c6a82; --algae: #9b6c17; --shell: #8a5640;
+  --good: #2b7547; --warn: #a8740c; --bad: #ad3a2c; --focus: #1c6a82;
+  --t1: #56685f; --t2: #1c6a82; --t3: #a8740c; --t4: #7a4f8f; --t5: #ad3a2c; --t6: #2b7547;
+  --scene-bg: #dfe8e4;
+  --font-display: "Spectral", "Iowan Old Style", Georgia, serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1915; --surface: #15231e; --surface-2: #1c2e27; --ink: #e2ebe6; --muted: #98aba2; --line: #2a3d35;
+    --grass: #63bf84; --water: #62b5cf; --algae: #d8a544; --shell: #d09477;
+    --good: #63bf84; --warn: #e0ad44; --bad: #ec7a68; --focus: #62b5cf;
+    --t1: #a9b8b1; --t2: #62b5cf; --t3: #e0ad44; --t4: #c79ad9; --t5: #ec7a68; --t6: #63bf84;
+    --scene-bg: #13221d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1915; --surface: #15231e; --surface-2: #1c2e27; --ink: #e2ebe6; --muted: #98aba2; --line: #2a3d35;
+  --grass: #63bf84; --water: #62b5cf; --algae: #d8a544; --shell: #d09477;
+  --good: #63bf84; --warn: #e0ad44; --bad: #ec7a68; --focus: #62b5cf;
+  --t1: #a9b8b1; --t2: #62b5cf; --t3: #e0ad44; --t4: #c79ad9; --t5: #ec7a68; --t6: #63bf84;
+  --scene-bg: #13221d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: 1.3rem; font-weight: 600; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--water); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.eyebrow, .label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+.note { font-size: 0.85rem; color: var(--muted); max-width: 72ch; }
+
+.top { padding-block: 28px 18px; }
+.top .wrap { display: grid; gap: 8px; }
+.top h1 { font-size: clamp(2rem, 4.5vw, 3rem); font-weight: 700; letter-spacing: -0.01em; }
+.top .lede { max-width: 70ch; color: var(--muted); }
+
+.layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; align-items: start; padding-block: 0 48px; }
+@media (max-width: 1020px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.controls { display: grid; gap: 18px; position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); max-height: calc(100vh - 24px); overflow-y: auto; }
+@media (max-width: 1020px) { .controls { position: static; max-height: none; overflow: visible; } }
+.viz { display: grid; gap: 20px; min-width: 0; }
+.stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.section { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+.dayhead { display: grid; gap: 6px; }
+.dayhead .big { font-family: var(--font-display); font-size: 2rem; font-weight: 700; line-height: 1; }
+.ticks { display: flex; gap: 3px; flex-wrap: wrap; }
+.ticks span { width: 30px; height: 6px; border-radius: 2px; background: var(--surface-2); border: 1px solid var(--line); position: relative; overflow: hidden; }
+.ticks span i { position: absolute; inset: 0 auto 0 0; background: var(--water); }
+
+.treat { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.treat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.treat-head b { display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; min-width: 0; }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; flex: none; }
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.field { display: grid; gap: 2px; font-size: 0.78rem; color: var(--muted); min-width: 0; }
+.field select, .field input { color: var(--ink); width: 100%; min-width: 0; }
+select, input[type="number"] { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+input[type="number"] { font-family: var(--font-data); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 18px; }
+fieldset:disabled .treat, fieldset:disabled .tankrow { opacity: 0.7; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg label { padding: 5px 10px; font-size: 0.85rem; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--water); color: var(--surface); font-weight: 600; }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.tankrow { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.tankrow .row { font-size: 0.85rem; }
+.slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 4px; }
+.slots select { font-size: 0.78rem; padding: 3px 4px; width: 100%; }
+
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface-2); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+.btn:hover:not(:disabled) { border-color: var(--water); }
+.btn.primary { background: var(--water); border-color: var(--water); color: var(--surface); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.small { padding: 4px 9px; font-size: 0.8rem; font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.status { font-size: 0.82rem; color: var(--muted); min-height: 1.2em; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 0.88rem; }
+
+.checks { display: grid; gap: 6px; font-size: 0.84rem; }
+.checks div { display: grid; grid-template-columns: 1.3em minmax(0, 1fr); gap: 4px; align-items: start; }
+.checks .ic { font-weight: 700; text-align: center; }
+.checks .bad .ic { color: var(--bad); } .checks .warn .ic { color: var(--warn); } .checks .good .ic { color: var(--good); }
+
+/* greenhouse */
+.scenecard { display: grid; gap: 12px; }
+.scenehead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sceneview { position: relative; width: 100%; aspect-ratio: 16 / 7; max-width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--scene-bg); touch-action: pan-y; cursor: grab; }
+@media (max-width: 700px) { .sceneview { aspect-ratio: 4 / 3; } }
+.sceneview canvas { width: 100% !important; height: 100% !important; display: block; }
+.sceneview .fallback { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); font-size: 0.9rem; }
+.sceneview .hint { position: absolute; right: 10px; bottom: 8px; font-size: 0.72rem; color: var(--muted); background: var(--surface); padding: 2px 8px; border-radius: 999px; opacity: 0.9; }
+.tlabel { position: absolute; transform: translate(-50%, -100%); font-size: 0.72rem; font-weight: 600; background: var(--surface); color: var(--ink); border: 1px solid var(--line); padding: 1px 7px; border-radius: 999px; pointer-events: none; white-space: nowrap; }
+.unitpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.unitpick button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 8px; font-family: var(--font-data); font-size: 0.78rem; cursor: pointer; }
+.unitpick button[aria-pressed="true"] { border-color: var(--ink); background: var(--surface-2); font-weight: 500; }
+.readout { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.readout div { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: grid; gap: 1px; min-width: 0; }
+.readout .v { font-family: var(--font-data); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.readout div.bad { border-color: var(--bad); } .readout div.warn { border-color: var(--warn); }
+
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 800px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart { display: grid; gap: 8px; min-width: 0; align-content: start; }
+.chart .plot { width: 100%; min-height: 230px; }
+.chart-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.clegend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.78rem; color: var(--muted); }
+.clegend span { display: inline-flex; align-items: center; gap: 5px; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.84rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td.num, th.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+td input[type="number"] { width: 6.5em; text-align: right; padding: 3px 6px; }
+.tablewrap { overflow-x: auto; }
+td .ok { color: var(--good); font-weight: 600; } td .off { color: var(--bad); font-weight: 600; }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.compare-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.result { font-size: 0.9rem; display: grid; gap: 8px; }
+.result .box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; background: var(--bg); }
+.result .box.bad { border-color: var(--bad); }
+.callout { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--bg); display: grid; gap: 6px; font-size: 0.88rem; }
+
+.log { display: grid; }
+.log-item { display: grid; grid-template-columns: 3.8em minmax(0, 1fr); gap: 10px; padding-block: 7px; border-top: 1px solid var(--line); font-size: 0.86rem; }
+.log-item:first-child { border-top: 0; }
+.log-item .w { font-family: var(--font-data); color: var(--muted); }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; border: 1px solid currentColor; margin-right: 4px; }
+.pill.bad { color: var(--bad); } .pill.warn { color: var(--warn); } .pill.good { color: var(--good); }
+
+details.panel > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; }
+details.panel[open] > summary { margin-bottom: 12px; }
+.prose { display: grid; gap: 10px; max-width: 76ch; font-size: 0.92rem; }
+.prose ol, .prose ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+textarea { width: 100%; min-height: 120px; font-family: var(--font-data); font-size: 0.75rem; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Project FISHES · Greenhouse mesocosm</p>
+    <h1>Seagrass Tank Lab</h1>
+    <p class="lede">Shoal grass (<i>Halodule wrightii</i>) growing in the greenhouse's three tanks: 240, 120 and 80 gallons, under natural light. Treat the water with hydrogen peroxide or nutrients, keep the tanks topped off, and track nitrogen, phosphorus, salinity, dissolved oxygen and magnesium the way the lab does. Then decide what the data can and cannot show.</p>
+    <p class="note">The plants and water are simulated from published relationships, with illustrative rates. The problems are real ones: tanks differ, transplants die back, water evaporates, walls grow algae, reagents expire and equipment fails.</p>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <aside class="controls panel" aria-label="Experiment protocol">
+    <div class="dayhead">
+      <span class="label" id="dayLabel">Experiment not started</span>
+      <div class="big" id="dayBig">Day 0</div>
+      <div class="ticks" id="ticks" aria-hidden="true"></div>
+    </div>
+    <div class="btns">
+      <button class="btn primary" type="button" id="runDay">Start day 1</button>
+      <button class="btn" type="button" id="runWeek">Run a week</button>
+      <button class="btn" type="button" id="runAll">Run to the end</button>
+      <button class="btn" type="button" id="reset">New experiment</button>
+    </div>
+    <p class="status" id="runStatus" role="status"></p>
+
+    <div class="stack">
+      <span class="label">Start from a design</span>
+      <div class="chips">
+        <button class="btn small" type="button" data-preset="her">One treatment per tank</button>
+        <button class="btn small" type="button" data-preset="blocked">Containers, blocked by tank</button>
+        <button class="btn small" type="button" data-preset="dose">Peroxide dose–response</button>
+        <button class="btn small" type="button" data-preset="drift">No top-off in summer</button>
+      </div>
+    </div>
+
+    <fieldset id="designSet">
+      <div class="section">
+        <span class="label">Treatments</span>
+        <div class="stack" id="treatments"></div>
+        <div class="row"><button class="btn small" type="button" id="addTreat">Add treatment</button><span class="note">Up to 6</span></div>
+      </div>
+
+      <div class="section">
+        <span class="label">Experimental units</span>
+        <div class="seg" role="radiogroup" aria-label="What gets each treatment">
+          <label><input type="radio" name="mode" value="tank" id="modeTank">Whole tanks</label>
+          <label><input type="radio" name="mode" value="container" id="modeCont">Containers in the tanks</label>
+        </div>
+        <p class="note" id="modeNote"></p>
+        <div class="stack" id="layout"></div>
+        <div class="btns" id="layoutBtns"></div>
+      </div>
+
+      <div class="section">
+        <span class="label">Protocol</span>
+        <div class="g2">
+          <label class="field" for="days">Run length<select id="days"><option value="14">2 weeks</option><option value="28">4 weeks</option><option value="42">6 weeks</option><option value="56">8 weeks</option></select></label>
+          <label class="field" for="sampling">Sampling<select id="sampling"><option value="daily">Every day</option><option value="mwf">Mon, Wed, Fri</option><option value="twice">Mon and Thu</option><option value="weekly">Once a week</option></select></label>
+          <label class="field" for="topoff">Top off evaporation<select id="topoff"><option value="daily">Every day</option><option value="twice">Mon and Thu</option><option value="weekly">Once a week</option><option value="never">Never</option></select></label>
+          <label class="field" for="topoffWater">Top-off water<select id="topoffWater"><option value="fresh">Fresh (RO/DI)</option><option value="sea">Seawater</option></select></label>
+          <label class="field" for="season">Season<select id="season"><option value="winter">Winter</option><option value="mild">Spring or fall</option><option value="summer">Summer</option></select></label>
+          <label class="field" for="stock">Peroxide stock<select id="stock"><option value="3">3% (drugstore)</option><option value="35">35% (lab grade)</option></select></label>
+        </div>
+        <label class="check"><input type="checkbox" id="aeration"> Air stones running</label>
+        <label class="check"><input type="checkbox" id="scrub"> Scrub walls every Monday</label>
+        <label class="check"><input type="checkbox" id="events"> Mishaps (equipment, weather, reagents)</label>
+        <div class="row"><span>Greenhouse run <span class="mono" id="seedText">#1</span></span><button class="btn small" type="button" id="newSeed">Different plants and luck</button></div>
+      </div>
+    </fieldset>
+
+    <div class="section">
+      <span class="label">Design check</span>
+      <div class="checks" id="checks"></div>
+    </div>
+  </aside>
+
+  <section class="viz">
+    <div class="panel scenecard">
+      <div class="scenehead">
+        <h2 id="unitTitle">Greenhouse</h2>
+        <span class="note mono" id="unitSub"></span>
+      </div>
+      <div class="sceneview" id="scene"><span class="hint">Drag to look around · click a tank or container</span></div>
+      <div class="unitpick" id="unitPick" role="group" aria-label="Choose a unit to inspect"></div>
+      <div class="readout" id="readout"></div>
+    </div>
+
+    <div class="panel stack">
+      <div class="row"><h2>Dosing sheet</h2><label class="check"><input type="checkbox" id="studentDoses"> Students calculate the doses</label></div>
+      <p class="note" id="doseNote"></p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Unit</th><th>Treatment</th><th class="num">Water</th><th class="num">H₂O₂ stock</th><th class="num">NaNO₃</th><th class="num">KH₂PO₄</th><th id="doseCheckHead" hidden>Check</th></tr></thead>
+        <tbody id="doseBody"></tbody>
+      </table></div>
+      <div class="btns" id="doseBtns" hidden><button class="btn small" type="button" id="checkDoses">Check our doses</button><button class="btn small" type="button" id="fillDoses">Fill in the correct doses</button></div>
+      <p class="status" id="doseStatus"></p>
+    </div>
+
+    <div class="charts">
+      <div class="panel chart">
+        <div class="chart-head"><label class="field" for="var0">Plot<select id="var0"></select></label></div>
+        <div class="plot" id="ch0"></div><div class="clegend" id="lg0"></div>
+      </div>
+      <div class="panel chart">
+        <div class="chart-head"><label class="field" for="var1">Plot<select id="var1"></select></label></div>
+        <div class="plot" id="ch1"></div><div class="clegend" id="lg1"></div>
+      </div>
+    </div>
+    <div class="row" style="justify-content:flex-start"><label class="check"><input type="checkbox" id="truth"> Show what happened between samples (instructor view)</label></div>
+
+    <div class="panel stack">
+      <h2>Results by unit</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Unit</th><th>Treatment</th><th class="num">Pots</th><th class="num">Shoots per pot</th><th class="num">Growth / wk</th><th class="num">Lowest DO</th><th class="num">Mean N</th><th class="num">Mean P</th><th class="num">Salinity</th><th class="num">Mg</th></tr></thead>
+        <tbody id="resultBody"></tbody>
+      </table></div>
+      <div class="row" style="justify-content:flex-start"><label for="growthFrom">Count growth from</label>
+        <select id="growthFrom"><option value="0">day 0 (planting)</option><option value="14" selected>day 14 (after transplant die-back)</option></select></div>
+      <p class="note">All values come from the sampled measurements. Growth is the change in ln(shoots per pot) per week, averaged over the pots in a unit. N is nitrate-nitrogen and P is phosphate-phosphorus, both in mg/L; DO in mg/L; salinity in ppt; Mg in mg/L.</p>
+    </div>
+
+    <div class="two">
+      <div class="panel stack">
+        <h2>Compare two treatments</h2>
+        <div class="compare-form">
+          <label class="field" for="cmpA">First<select id="cmpA"></select></label>
+          <label class="field" for="cmpB">Second<select id="cmpB"></select></label>
+          <label class="field" for="cmpM">Measurement<select id="cmpM">
+            <option value="growth">Seagrass growth</option><option value="minDO">Lowest DO</option><option value="meanN">Mean N</option><option value="meanP">Mean P</option><option value="lastS">Final salinity</option>
+          </select></label>
+        </div>
+        <div class="result" id="cmpOut"></div>
+      </div>
+      <div class="panel stack">
+        <h2>Lab notebook</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+
+    <div class="panel callout">
+      <span class="label">Take it to the lagoon</span>
+      <p>The peroxide treatment is a small-scale version of Option D in the lagoon simulator (direct algal bloom management), and the nutrient treatment is the problem Option A tries to remove. If a single peroxide dose only delays a bloom by a week in a tank, what should students expect from treating a 150-mile lagoon?</p>
+      <p><a href="index.html">Open the lagoon simulator</a></p>
+    </div>
+
+    <details class="panel">
+      <summary>Data</summary>
+      <div class="stack">
+        <p class="note">Every sampled measurement, one row per unit per sampling day.</p>
+        <div class="btns"><button class="btn small" type="button" id="copyCsv">Copy all measurements as CSV</button></div>
+        <p class="status" id="csvStatus"></p>
+        <textarea id="csvOut" readonly hidden aria-label="Measurements as CSV"></textarea>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary>How the tanks work</summary>
+      <div class="prose">
+        <p><b>The facility.</b> One 240-gallon tank (7 × 4 ft, 15 in tall), one 120-gallon tank (4 × 2 ft, 26 in tall) and one 80-gallon tank in a greenhouse with no lamps. The 80-gallon footprint is assumed to be 4 × 1.5 ft. The greenhouse passes about 70% of outdoor sunlight. Seagrass grows in pots set on the tank floor, so the shallow 240-gallon tank gets the most light at the leaves and the deep 120-gallon tank the least. Containers are 10-liter tubs set inside a tank, which then acts as a water bath.</p>
+        <p><b>Each simulated day:</b></p>
+        <ol>
+          <li><b>Evaporation</b> lowers the water level and concentrates everything dissolved: salt, magnesium, nutrients. Shallow water loses a larger share of its depth each day, so the 240-gallon tank and the containers drift fastest. Topping off with fresh water restores the salinity; topping off with seawater adds more salt every time.</li>
+          <li><b>Hydrogen peroxide</b> breaks down to water and oxygen (each mg/L of H₂O₂ releases 0.47 mg/L of O₂), with a half-life of about a day in clean water and faster with more algae. While it lasts it kills phytoplankton and the film on walls and leaves. Above about 6 mg/L on average for a day it also damages seagrass leaves.</li>
+          <li><b>Phytoplankton</b> grow on nitrate and phosphate until one runs out, using roughly 16 parts nitrogen to 1 part phosphorus by moles. Dead algae decompose, which uses oxygen and releases nutrients again.</li>
+          <li><b>Oxygen</b> moves toward saturation, about 6.5 mg/L at 28 °C and 30 ppt, quickly with air stones and slowly without. Algae add oxygen by day and use it at night. The DO you measure is a morning reading; the pre-dawn low is lower still.</li>
+          <li><b>Seagrass</b> grows with the light reaching its leaves, which falls with water depth, algae and the film on the leaves. It loses shoots in hot water (above about 31 °C), above 40 ppt, when oxygen drops below 2 mg/L at night, and after peroxide burns.</li>
+        </ol>
+        <p><b>Measurements</b> carry realistic error: nutrient kits about ±10%, refractometer ±0.5 ppt, DO probe ±0.15 mg/L, magnesium kit ±25 mg/L, peroxide strips read to the nearest color block. Magnesium in seawater tracks salinity (about 1,290 mg/L at 35 ppt), so the two should rise and fall together; when they don't, check the reagents.</p>
+        <p><b>Dose math.</b> mL of peroxide stock = target mg/L × tank liters ÷ stock mg/mL (about 30 mg/mL for 3%, 396 mg/mL for 35%). Grams of NaNO₃ = target mg N/L × liters ÷ 1,000 ÷ 0.165. Grams of KH₂PO₄ = target mg P/L × liters ÷ 1,000 ÷ 0.228. A kit that reports nitrate as NO₃⁻ reads 4.43 times the nitrate-N value; phosphate as PO₄³⁻ reads 3.07 times phosphate-P.</p>
+        <h3>Where the numbers come from</h3>
+        <ul>
+          <li>Hydrogen peroxide against brown tide: Randhawa et al. (2012), <a href="https://doaj.org/article/4f282d92a11f4029b356c54b1e31c012" target="_blank" rel="noopener">PLoS ONE</a>. 1.6 mg/L removed a dense brown tide within 24 hours, while diatoms and green algae were suppressed only briefly and rebounded above controls within 72 hours.</li>
+          <li>Seagrass light requirements: Beck, Hagy and Le (2018), <a href="https://doi.org/10.1007/s12237-017-0287-1" target="_blank" rel="noopener">Estuaries and Coasts 41:592–610</a>.</li>
+          <li>Indian River Lagoon seagrass loss under blooms: Morris et al. (2022), <a href="https://doi.org/10.3389/fmars.2021.789818" target="_blank" rel="noopener">Frontiers in Marine Science</a>.</li>
+        </ul>
+        <p class="note">The seagrass peroxide threshold, growth rates and event frequencies are illustrative choices, not measurements. Replace them with the lab's own values as the data come in.</p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// Greenhouse seagrass mesocosm model — illustrative. Daily time step.
+// Facility: one 240-gal, one 120-gal and one 80-gal tank in a greenhouse with natural light.
+(function (root) {
+  const TANKS = [
+    { key: '240', name: '240-gallon tank', dims: '7 × 4 ft, 15 in tall', Lm: 2.134, Wm: 1.219, Hm: 0.381, vol: 908, cap: 12, tOff: 0.6 },
+    { key: '120', name: '120-gallon tank', dims: '4 × 2 ft, 26 in tall', Lm: 1.219, Wm: 0.610, Hm: 0.660, vol: 454, cap: 6, tOff: -0.3 },
+    { key: '80', name: '80-gallon tank', dims: '4 × 1.5 ft, 22 in tall (footprint assumed)', Lm: 1.219, Wm: 0.457, Hm: 0.559, vol: 303, cap: 4, tOff: 0 }
+  ];
+  TANKS.forEach(t => { t.area = t.Lm * t.Wm; t.depth = t.vol / 1000 / t.area; });
+  const CONTAINER = { vol: 10, depth: 0.22, area: 0.0455, r: 0.12, h: 0.26 };
+  const SEASONS = {
+    winter: { label: 'Winter', T: 21, evap: 0.0025, light: 0.75, heatP: 0.005 },
+    mild: { label: 'Spring or fall', T: 26, evap: 0.004, light: 1.0, heatP: 0.02 },
+    summer: { label: 'Summer', T: 31, evap: 0.006, light: 1.05, heatP: 0.06 }
+  };
+  const STOCK = { '3': 30, '35': 396 };          // mg H2O2 per mL of 3% or 35% stock
+  const N_FRAC = 14.007 / 84.995;                 // g N per g NaNO3
+  const P_FRAC = 30.974 / 136.086;                // g P per g KH2PO4
+
+  const D = {
+    S0: 30, N0: 0.05, P0: 0.01, A0: 3,
+    potShoots: 8, potMax: 50, potHeight: 0.12, containerPotHeight: 0.1,
+    ghTrans: 70,                                   // % of outdoor sun inside the greenhouse
+    pmax: 0.035, ik: 30, r0: 0.017, q10: 2,
+    kd0: 0.6, kchl: 0.03, filmShade: 1.0,
+    muMax: 1.2, kN: 0.02, kP: 0.003, aLoss: 0.15, aMax: 150,
+    nPerChl: 0.0088, pPerChl: 0.00122, o2PerChl: 0.133,
+    detDecay: 0.25, remin: 0.8, nSink: 0.02, pSink: 0.01,
+    hDecay0: 0.5, hDecayA: 0.02, hDecayF: 0.3, hKill: 0.35, hFilm: 0.08,
+    hGrass: 6, hGrassRate: 0.015, sGrass: 40, sGrassRate: 0.006, doGrass: 2, doGrassRate: 0.02,
+    potSd: 0.15, tankSd: 0.1,
+    events: true, seed: 1
+  };
+
+  function rng(seed) { let s = (seed >>> 0) || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+  function gauss(r) { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); }
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+
+  function doSat(T, S) {
+    const f = 14.652 - 0.41022 * T + 0.007991 * T * T - 0.000077774 * T * T * T;
+    return f * (1 - 0.0053 * S);
+  }
+  function tempGross(T) { if (T > 31) return Math.max(0, 1 - 0.15 * (T - 31)); if (T < 20) return Math.max(0.2, 1 - 0.05 * (20 - T)); return 1; }
+  function resp(T, p) { return p.r0 * Math.pow(p.q10, (T - 28) / 10) + (T > 33 ? 0.01 * (T - 33) : 0); }
+
+  function isControl(tr) { return !tr.h2o2 && !tr.n && !tr.p; }
+  function treatmentName(tr) {
+    if (isControl(tr)) return 'Control';
+    const parts = [];
+    if (tr.h2o2) parts.push(`H₂O₂ ${tr.h2o2} mg/L${tr.hSched === 'weekly' ? ' weekly' : ''}`);
+    const nut = [];
+    if (tr.n) nut.push(`N ${tr.n}`); if (tr.p) nut.push(`P ${tr.p}`);
+    if (nut.length) parts.push(`+${nut.join(' +')} mg/L${tr.nSched === 'weekly' ? ' weekly' : ''}`);
+    return parts.join(' ');
+  }
+  function requiredDose(vol, tr, stock) {
+    return {
+      h2o2_mL: tr.h2o2 ? tr.h2o2 * vol / STOCK[stock] : 0,
+      nano3_g: tr.n ? tr.n * vol / 1000 / N_FRAC : 0,
+      kh2po4_g: tr.p ? tr.p * vol / 1000 / P_FRAC : 0
+    };
+  }
+
+  // Lay out experimental units from the design
+  function buildUnits(design) {
+    const units = [];
+    if (design.mode === 'tank') {
+      TANKS.forEach((t, ti) => {
+        const tr = design.tankAssign[ti];
+        if (tr == null || tr < 0) return;
+        units.push({ id: t.key, label: t.name, tank: ti, kind: 'tank', slot: 0, vol: t.vol, depth: t.depth, treatment: tr, nPots: design.potsPerTank });
+      });
+    } else {
+      TANKS.forEach((t, ti) => {
+        (design.containers[ti] || []).forEach((tr, k) => {
+          if (tr == null || tr < 0) return;
+          units.push({ id: `${t.key}-${k + 1}`, label: `Container ${t.key}-${k + 1}`, tank: ti, kind: 'container', slot: k, vol: CONTAINER.vol, depth: CONTAINER.depth, treatment: tr, nPots: 1 });
+        });
+      });
+    }
+    return units;
+  }
+
+  function weekday(d) { return d % 7; }   // day 0 is a Monday
+  const SAMPLING = { daily: () => true, mwf: d => [0, 2, 4].includes(weekday(d)), twice: d => [0, 3].includes(weekday(d)), weekly: d => weekday(d) === 0 };
+  const TOPOFF = { daily: () => true, twice: d => [0, 3].includes(weekday(d)), weekly: d => weekday(d) === 0, never: () => false };
+
+  function createExperiment(design, overrides) {
+    const p = Object.assign({}, D, overrides || {});
+    const rDyn = rng(p.seed * 104729 + 7), rEv = rng(p.seed * 7919 + 3), rMeas = rng(p.seed * 15485863 + 11);
+    const season = SEASONS[design.season] || SEASONS.mild;
+    const tanks = TANKS.map(t => ({ pos: clamp(1 + 0.05 * gauss(rDyn), 0.9, 1.08), g: Math.exp(p.tankSd * gauss(rDyn)), tOff: t.tOff, pumpFail: 0 }));
+    const units = buildUnits(design).map(u => {
+      const tr = design.treatments[u.treatment];
+      const pots = [];
+      for (let k = 0; k < u.nPots; k++) {
+        let shock = 0.1;
+        if (p.events) shock = rDyn() < 0.15 ? 0.45 + 0.3 * rDyn() : 0.25 * rDyn();
+        pots.push({ s: p.potShoots, g: Math.exp(p.potSd * gauss(rDyn) - p.potSd * p.potSd / 2), shock });
+      }
+      const potH = u.kind === 'container' ? p.containerPotHeight : p.potHeight;
+      const S = p.S0;
+      return Object.assign(u, {
+        tr, canopyZ: Math.max(0.05, u.depth - potH),
+        v: 1, S, Mg: 1290 * S / 35, N: p.N0, P: p.P0, A: p.A0, Det: 0, H: 0, F: 0.05,
+        T: season.T + tanks[u.tank].tOff, DO: doSat(season.T, S), doMorning: doSat(season.T, S), doMin: doSat(season.T, S),
+        pots, filmEvent: 0, flags: {}, samples: [], daily: [], doses: []
+      });
+    });
+    const env = { heat: 0, cloud: 0, reagent: null };
+    if (p.events && rEv() < 0.4) {
+      const start = 3 + Math.floor(rEv() * Math.max(1, design.days - 10));
+      env.reagent = { param: rEv() < 0.5 ? 'P' : 'Mg', start, end: start + 7, factor: 0.7 };
+    }
+    const ex = { p, design, season, tanks, units, env, rDyn, rEv, rMeas, day: 0, log: [], done: false };
+    morning(ex, 0);
+    return ex;
+  }
+
+  function strip(h) { const L = [0, 0.5, 1, 2, 3, 5, 10, 25, 50, 100]; let best = 0; L.forEach(x => { if (Math.abs(x - h) < Math.abs(best - h)) best = x; }); return best; }
+  function appearance(A) { return A < 8 ? 'Clear' : A < 20 ? 'Slightly green' : A < 45 ? 'Green' : 'Very green'; }
+  function filmLabel(F) { return F < 0.2 ? 'Clean' : F < 0.5 ? 'Light film' : 'Heavy film'; }
+
+  function measure(ex, u, d) {
+    const r = ex.rMeas, g = () => gauss(r), env = ex.env;
+    const bias = k => env.reagent && env.reagent.param === k && d >= env.reagent.start && d < env.reagent.end ? env.reagent.factor : 1;
+    const round = (x, step) => Math.round(x / step) * step;
+    return {
+      day: d,
+      N: Math.max(0, round(u.N * (1 + 0.08 * g()) + 0.005 * g(), 0.01)),
+      P: Math.max(0, round((u.P * (1 + 0.1 * g()) + 0.002 * g()) * bias('P'), 0.001)),
+      S: round(u.S + 0.4 * g(), 1),
+      DO: Math.max(0, round(u.doMorning + 0.15 * g(), 0.1)),
+      Mg: Math.max(0, round((u.Mg + 25 * g()) * bias('Mg'), 10)),
+      T: round(u.T + 0.2 * g(), 0.1),
+      H2O2: strip(u.H),
+      water: appearance(u.A), film: filmLabel(u.F),
+      shoots: u.pots.map(pt => Math.max(0, Math.round(pt.s + (r() < 0.1 ? (r() < 0.5 ? -1 : 1) : 0))))
+    };
+  }
+
+  function addDose(ex, u, which) {
+    const design = ex.design, tr = u.tr, stock = design.stock;
+    const override = design.doses && design.doses[u.id];
+    const need = requiredDose(u.vol, tr, stock);
+    const amt = override ? override : need;
+    const L = u.vol * u.v;
+    const rec = { day: ex.day, h2o2_mL: 0, nano3_g: 0, kh2po4_g: 0 };
+    if (which.h && tr.h2o2) { const mL = +amt.h2o2_mL || 0; u.H += mL * STOCK[stock] / L; rec.h2o2_mL = mL; }
+    if (which.n && (tr.n || tr.p)) {
+      const gN = +amt.nano3_g || 0, gP = +amt.kh2po4_g || 0;
+      if (tr.n) { u.N += gN * N_FRAC * 1000 / L; rec.nano3_g = gN; }
+      if (tr.p) { u.P += gP * P_FRAC * 1000 / L; rec.kh2po4_g = gP; }
+    }
+    if (rec.h2o2_mL || rec.nano3_g || rec.kh2po4_g) u.doses.push(rec);
+  }
+
+  // morning routine for day d: sample, top off, dose
+  function morning(ex, d) {
+    const design = ex.design, last = d >= design.days;
+    const sampleToday = d === 0 || last || (SAMPLING[design.sampling] || SAMPLING.weekly)(d);
+    for (const u of ex.units) {
+      u.daily.push(snapshot(u, d));
+      if (sampleToday) u.samples.push(measure(ex, u, d));
+    }
+    if (last) return;
+    // top off
+    if (d > 0 && (TOPOFF[design.topoff] || TOPOFF.never)(d)) {
+      const skip = ex.p.events && ex.rEv() < 0.06;
+      if (skip) ex.log.push({ day: d, kind: 'warn', text: 'Top-off skipped: nobody came in to add water today.' });
+      else for (const u of ex.units) topOff(ex, u);
+    }
+    // dose
+    for (const u of ex.units) {
+      const h = d === 0 || (u.tr.hSched === 'weekly' && weekday(d) === 0);
+      const n = d === 0 || (u.tr.nSched === 'weekly' && weekday(d) === 0);
+      addDose(ex, u, { h, n });
+    }
+    if (design.scrub && d > 0 && weekday(d) === 0) for (const u of ex.units) u.F *= 0.5;
+  }
+
+  function topOff(ex, u) {
+    if (u.v >= 0.999) return;
+    const add = 1 - u.v, sea = ex.design.topoffWater === 'sea';
+    const p = ex.p;
+    u.S = u.S * u.v + (sea ? p.S0 : 0) * add;
+    u.Mg = u.Mg * u.v + (sea ? 1290 * p.S0 / 35 : 0) * add;
+    u.N = u.N * u.v + (sea ? p.N0 : 0) * add;
+    u.P = u.P * u.v + (sea ? p.P0 : 0) * add;
+    u.H *= u.v; u.A *= u.v; u.Det *= u.v;
+    u.v = 1;
+  }
+
+  function snapshot(u, d) {
+    return { day: d, N: u.N, P: u.P, S: u.S, DO: u.doMorning, doMin: u.doMin, Mg: u.Mg, T: u.T, H2O2: u.H, A: u.A, F: u.F, level: u.v,
+      shoots: u.pots.reduce((s, pt) => s + pt.s, 0) / Math.max(1, u.pots.length) };
+  }
+
+  function simulateDay(ex) {
+    const { p, season, tanks, env, rDyn, rEv } = ex, d = ex.day;
+    // shared events
+    if (p.events) {
+      if (env.heat <= 0 && rEv() < season.heatP) { env.heat = 2; ex.log.push({ day: d, kind: 'bad', text: 'Greenhouse vents stuck: tanks ran about 4 °C hotter for two days.' }); }
+      if (env.cloud <= 0 && rEv() < 0.03) { env.cloud = 3 + Math.floor(rEv() * 3); ex.log.push({ day: d, kind: 'warn', text: `Cloudy spell: about half the usual sunlight for ${env.cloud} days.` }); }
+      if (ex.design.aeration) tanks.forEach((t, ti) => { if (t.pumpFail <= 0 && rEv() < 0.012) { t.pumpFail = 2; ex.log.push({ day: d, kind: 'bad', text: `Air pump on the ${TANKS[ti].name} failed for two days.` }); } });
+      ex.units.forEach(u => { if (rEv() < 0.008) { u.F = Math.min(1, u.F + 0.3); ex.log.push({ day: d, kind: 'warn', text: `${u.label}: algae film spread fast on the walls.` }); } });
+    }
+    const heat = env.heat > 0 ? 4 : 0, cloud = env.cloud > 0 ? 0.55 : 1;
+    for (const u of ex.units) {
+      const tk = tanks[u.tank];
+      const T = season.T + tk.tOff + heat + 0.4 * gauss(rDyn);
+      u.T = T;
+      // evaporation concentrates everything dissolved
+      const e = season.evap * (1 + 0.05 * (T - 26));
+      const vNew = Math.max(0.5, u.v - e / u.depth), f = u.v / vNew;
+      u.S *= f; u.Mg *= f; u.N *= f; u.P *= f; u.H *= f; u.A *= f; u.Det *= f; u.v = vNew;
+      // peroxide decays to water and oxygen
+      const k = p.hDecay0 + p.hDecayA * u.A + p.hDecayF * u.F;
+      const H0 = u.H, H1 = H0 * Math.exp(-k), Hmean = k > 0 ? (H0 - H1) / k : H0;
+      const o2H = 0.47 * (H0 - H1); u.H = H1;
+      // phytoplankton
+      const fN = u.N / (u.N + p.kN), fP = u.P / (u.P + p.kP), fT = clamp(Math.pow(1.066, T - 25), 0.4, 1.4);
+      const mu = p.muMax * fN * fP * fT * Math.max(0, 1 - u.A / p.aMax);
+      let grow = u.A * mu; grow = Math.min(grow, u.N / p.nPerChl, u.P / p.pPerChl);
+      const loss = u.A * p.aLoss;
+      const A1 = u.A + grow - loss, killed = A1 * (1 - Math.exp(-p.hKill * Hmean));
+      u.A = Math.max(0.2, A1 - killed); u.Det += loss + killed;
+      u.N -= grow * p.nPerChl; u.P -= grow * p.pPerChl;
+      const decomp = u.Det * p.detDecay; u.Det -= decomp;
+      u.N += decomp * p.nPerChl * p.remin; u.P += decomp * p.pPerChl * p.remin;
+      u.N = Math.max(0, u.N * (1 - p.nSink)); u.P = Math.max(0, u.P * (1 - p.pSink));
+      // wall and leaf film
+      u.F += 0.25 * fN * fP * u.F * (1 - u.F) + 0.002 - u.F * (1 - Math.exp(-p.hFilm * Hmean));
+      u.F = clamp(u.F, 0, 1);
+      // oxygen
+      const sat = doSat(T, u.S);
+      const aerated = ex.design.aeration && tk.pumpFail <= 0;
+      const kr = aerated ? 4 : 0.5 / u.depth;
+      const src = p.o2PerChl * grow + o2H - p.o2PerChl * decomp - (0.05 / u.depth) * (T / 26);
+      u.DO = Math.max(0.2, (u.DO + src + kr * sat) / (1 + kr));
+      const gp = u.A * 0.5 * fT;            // gross photosynthesis continues even when growth is nutrient-limited
+      const swing = p.o2PerChl * gp / (1 + kr / 3);
+      u.doMorning = Math.max(0, u.DO - 0.4 * swing); u.doMin = Math.max(0, u.DO - 0.5 * swing);
+      // light reaching the seagrass
+      const Kd = p.kd0 + p.kchl * u.A;
+      const Ileaf = p.ghTrans * season.light * cloud * tk.pos * Math.exp(-Kd * u.canopyZ) * Math.exp(-p.filmShade * u.F);
+      u.Ileaf = Ileaf;
+      // stress
+      let extra = p.hGrassRate * Math.max(0, Hmean - p.hGrass);
+      if (u.S > p.sGrass) extra += p.sGrassRate * (u.S - p.sGrass);
+      if (u.S < 15) extra += 0.006 * (15 - u.S);
+      if (u.doMin < p.doGrass) extra += p.doGrassRate;
+      if (Hmean > p.hGrass && !u.flags.h) { u.flags.h = 1; ex.log.push({ day: d, kind: 'bad', text: `${u.label}: peroxide stayed above ${p.hGrass} mg/L long enough to burn seagrass leaves.` }); }
+      if (u.S > p.sGrass && !u.flags.s) { u.flags.s = 1; ex.log.push({ day: d, kind: 'bad', text: `${u.label}: salinity passed ${p.sGrass} ppt.` }); }
+      if (u.doMin < p.doGrass && !u.flags.o) { u.flags.o = 1; ex.log.push({ day: d, kind: 'bad', text: `${u.label}: oxygen fell below ${p.doGrass} mg/L before dawn.` }); }
+      const g0 = p.pmax * (1 - Math.exp(-Ileaf / p.ik)) * tempGross(T) * tk.g;
+      const r = resp(T, p) + extra;
+      for (const pt of u.pots) {
+        const net = g0 * pt.g - r;
+        pt.s += net > 0 ? pt.s * net * (1 - pt.s / p.potMax) : pt.s * net;
+        if (d < 10) pt.s *= 1 - pt.shock / 10;
+        pt.s = Math.max(0, pt.s);
+      }
+    }
+    if (env.heat > 0) env.heat--; if (env.cloud > 0) env.cloud--;
+    tanks.forEach(t => { if (t.pumpFail > 0) t.pumpFail--; });
+    ex.day = d + 1;
+    morning(ex, ex.day);
+    if (ex.day >= ex.design.days) {
+      ex.done = true;
+      if (env.reagent && env.reagent.start < ex.design.days) ex.log.push({ day: env.reagent.start, kind: 'warn', text: `Days ${env.reagent.start}–${Math.min(env.reagent.end, ex.design.days) - 1}: the ${env.reagent.param === 'P' ? 'phosphate' : 'magnesium'} test reagent was expired and read about 30% low. Did anyone notice?` });
+      const lost = [];
+      ex.units.forEach(u => u.pots.forEach((pt, k) => { if (pt.shock > 0.4) lost.push(u.pots.length > 1 ? `${u.label} pot ${k + 1}` : u.label); }));
+      if (lost.length) ex.log.push({ day: 9, kind: 'warn', text: `Transplant die-back hit ${lost.join(', ')} hard in the first ten days.` });
+    }
+    return ex;
+  }
+
+  const api = { TANKS, CONTAINER, SEASONS, STOCK, DEFAULTS: D, N_FRAC, P_FRAC, createExperiment, simulateDay, buildUnits, requiredDose, treatmentName, isControl, doSat, SAMPLING };
+  if (typeof module !== 'undefined') module.exports = api; else root.TankModel = api;
+})(this);
+
+</script>
+<script>
+(function () {
+  const TM = window.TankModel, TANKS = TM.TANKS;
+  const $ = id => document.getElementById(id);
+  const fmt = (x, d) => (x == null || !isFinite(x)) ? '—' : Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const tcolor = i => `var(--t${(i % 6) + 1})`;
+  const H_OPTS = [0, 1, 2, 3, 5, 10, 20], N_OPTS = [0, 0.1, 0.25, 0.5, 1], P_OPTS = [0, 0.01, 0.02, 0.05, 0.1];
+  const GAL = 3.785;
+  const VARS = {
+    shoots: { label: 'Shoots per pot', unit: 'shoots', d: 1, min0: true },
+    DO: { label: 'Dissolved oxygen', unit: 'mg/L', d: 1, min0: true },
+    N: { label: 'Nitrate-N', unit: 'mg/L', d: 2, min0: true },
+    P: { label: 'Phosphate-P', unit: 'mg/L', d: 3, min0: true },
+    S: { label: 'Salinity', unit: 'ppt', d: 0 },
+    Mg: { label: 'Magnesium', unit: 'mg/L', d: 0 },
+    T: { label: 'Temperature', unit: '°C', d: 1 },
+    H2O2: { label: 'Peroxide (test strip)', unit: 'mg/L', d: 1, min0: true }
+  };
+  const T = (h2o2, n, p, hSched, nSched) => ({ h2o2, n, p, hSched: hSched || 'once', nSched: nSched || 'once' });
+  const PROTOCOL = { days: 42, sampling: 'mwf', topoff: 'twice', topoffWater: 'fresh', scrub: true, aeration: true, season: 'mild', stock: '3' };
+  const PRESETS = {
+    her: () => Object.assign({}, PROTOCOL, { mode: 'tank', treatments: [T(0, 0, 0), T(5, 0, 0), T(0, 0.5, 0.05)], tankAssign: [0, 1, 2], potsPerTank: 4, containers: [[], [], []] }),
+    blocked: () => Object.assign({}, PROTOCOL, { mode: 'container', treatments: [T(0, 0, 0), T(5, 0, 0), T(0, 0.5, 0.05), T(5, 0.5, 0.05)], tankAssign: [0, 1, 2], potsPerTank: 4, containers: [[0, 1, 2, 3, 0, 1, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3]] }),
+    dose: () => Object.assign({}, PROTOCOL, { mode: 'container', aeration: false, treatments: [0, 2, 5, 10, 20].map(h => T(h, 0.5, 0.05, 'weekly', 'once')), tankAssign: [0, 1, 2], potsPerTank: 4, containers: [[0, 1, 2, 3, 4, 0, 1, 2, 3, 4], [0, 1, 2, 3, 4], []] }),
+    drift: () => Object.assign({}, PROTOCOL, { mode: 'tank', topoff: 'never', season: 'summer', treatments: [T(0, 0, 0)], tankAssign: [0, 0, 0], potsPerTank: 2, containers: [[], [], []] })
+  };
+  const state = { design: PRESETS.her(), seed: 1, events: true, ex: null, sel: 0, truth: false, studentDoses: false, doseInputs: {}, vars: ['shoots', 'DO'], growthFrom: 14 };
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const started = () => state.ex && state.ex.day > 0;
+  const tname = i => `T${i + 1}`;
+  const tlabel = i => `${tname(i)} · ${TM.treatmentName(state.design.treatments[i])}`;
+
+  /* ---------- treatments editor ---------- */
+  function sel(id, opts, val, fmtFn) { return `<select id="${id}">${opts.map(o => `<option value="${o}" ${String(o) === String(val) ? 'selected' : ''}>${fmtFn ? fmtFn(o) : o}</option>`).join('')}</select>`; }
+  function renderTreatments() {
+    const trs = state.design.treatments;
+    $('treatments').innerHTML = trs.map((t, i) => `
+      <div class="treat">
+        <div class="treat-head"><b><span class="dot" style="background:${tcolor(i)}"></span>${tname(i)}: ${TM.treatmentName(t)}</b>
+          <button class="btn small" type="button" data-del="${i}" ${trs.length < 2 ? 'disabled' : ''} aria-label="Remove ${tname(i)}">Remove</button></div>
+        <div class="g2">
+          <label class="field" for="th${i}">H₂O₂ dose${sel('th' + i, H_OPTS, t.h2o2, o => o ? o + ' mg/L' : 'None')}</label>
+          <label class="field" for="ths${i}">H₂O₂ schedule${sel('ths' + i, ['once', 'weekly'], t.hSched, o => o === 'once' ? 'Day 0 only' : 'Every Monday')}</label>
+          <label class="field" for="tn${i}">Nitrogen added${sel('tn' + i, N_OPTS, t.n, o => o ? o + ' mg N/L' : 'None')}</label>
+          <label class="field" for="tp${i}">Phosphorus added${sel('tp' + i, P_OPTS, t.p, o => o ? o + ' mg P/L' : 'None')}</label>
+          <label class="field" for="tns${i}">Nutrient schedule${sel('tns' + i, ['once', 'weekly'], t.nSched, o => o === 'once' ? 'Day 0 only' : 'Every Monday')}</label>
+        </div>
+      </div>`).join('');
+    trs.forEach((t, i) => {
+      [['th', 'h2o2', Number], ['ths', 'hSched', String], ['tn', 'n', Number], ['tp', 'p', Number], ['tns', 'nSched', String]].forEach(([pre, k, cast]) =>
+        $(pre + i).addEventListener('change', e => { t[k] = cast(e.target.value); renderTreatments(); renderLayout(); designChanged(); }));
+    });
+    $('treatments').querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => removeTreatment(+b.dataset.del)));
+    $('addTreat').disabled = trs.length >= 6;
+  }
+  function removeTreatment(i) {
+    const d = state.design; d.treatments.splice(i, 1);
+    const fix = v => v === i ? -1 : v > i ? v - 1 : v;
+    d.tankAssign = d.tankAssign.map(fix); d.containers = d.containers.map(c => c.map(fix));
+    renderTreatments(); renderLayout(); designChanged();
+  }
+
+  /* ---------- layout editor ---------- */
+  function trOptions(val, allowEmpty) {
+    return (allowEmpty ? [`<option value="-1" ${val < 0 ? 'selected' : ''}>${allowEmpty}</option>`] : []).concat(state.design.treatments.map((t, i) => `<option value="${i}" ${val === i ? 'selected' : ''}>${tname(i)}</option>`)).join('');
+  }
+  function renderLayout() {
+    const d = state.design;
+    $('modeTank').checked = d.mode === 'tank'; $('modeCont').checked = d.mode === 'container';
+    if (d.mode === 'tank') {
+      $('modeNote').textContent = 'Each tank gets one treatment, and every pot in it shares that water.';
+      $('layout').innerHTML = TANKS.map((t, ti) => `
+        <div class="tankrow">
+          <div class="row"><b>${t.name}</b><span class="note mono">${fmt(t.depth * 39.37, 1)} in of water</span></div>
+          <label class="field" for="ta${ti}">Treatment<select id="ta${ti}">${trOptions(d.tankAssign[ti], 'Not used')}</select></label>
+        </div>`).join('') +
+        `<label class="field" for="pots">Seagrass pots per tank<select id="pots">${[1, 2, 3, 4, 5, 6, 8].map(n => `<option ${n === d.potsPerTank ? 'selected' : ''}>${n}</option>`).join('')}</select></label>`;
+      TANKS.forEach((t, ti) => $('ta' + ti).addEventListener('change', e => { d.tankAssign[ti] = +e.target.value; designChanged(); }));
+      $('pots').addEventListener('change', e => { d.potsPerTank = +e.target.value; designChanged(); });
+      $('layoutBtns').innerHTML = '';
+    } else {
+      $('modeNote').textContent = 'Each 10-liter container holds one pot and gets its own treatment. The tank around it is a water bath.';
+      $('layout').innerHTML = TANKS.map((t, ti) => {
+        const c = d.containers[ti] || [];
+        return `<div class="tankrow">
+          <div class="row"><b>${t.name}</b><label class="field" for="tc${ti}" style="grid-auto-flow:column;align-items:center;gap:6px">Containers
+            <select id="tc${ti}">${Array.from({ length: t.cap + 1 }, (_, n) => `<option ${n === c.length ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+          <div class="slots">${c.map((v, k) => `<select id="cs${ti}_${k}" aria-label="${t.name} container ${k + 1}">${trOptions(v, '—')}</select>`).join('')}</div>
+        </div>`;
+      }).join('');
+      TANKS.forEach((t, ti) => {
+        $('tc' + ti).addEventListener('change', e => {
+          const n = +e.target.value, c = d.containers[ti] || [];
+          while (c.length < n) c.push(c.length % d.treatments.length);
+          c.length = n; d.containers[ti] = c; renderLayout(); designChanged();
+        });
+        (d.containers[ti] || []).forEach((v, k) => $(`cs${ti}_${k}`).addEventListener('change', e => { d.containers[ti][k] = +e.target.value; designChanged(); }));
+      });
+      $('layoutBtns').innerHTML = '<button class="btn small" type="button" id="spread">Every treatment in every tank</button><button class="btn small" type="button" id="oneEach">One treatment per tank</button>';
+      $('spread').addEventListener('click', () => {
+        const n = d.treatments.length;
+        d.containers = TANKS.map((t, ti) => { const k = Math.max(n, Math.floor(t.cap / n) * n); return Array.from({ length: Math.min(t.cap, k) }, (_, j) => j % n); });
+        renderLayout(); designChanged();
+      });
+      $('oneEach').addEventListener('click', () => {
+        d.containers = TANKS.map((t, ti) => ti < d.treatments.length ? Array(t.cap).fill(ti) : []);
+        renderLayout(); designChanged();
+      });
+    }
+  }
+
+  /* ---------- protocol ---------- */
+  const PROTO_IDS = ['days', 'sampling', 'topoff', 'topoffWater', 'season', 'stock'];
+  function renderProtocol() {
+    const d = state.design;
+    PROTO_IDS.forEach(id => { $(id).value = String(d[id]); });
+    $('aeration').checked = d.aeration; $('scrub').checked = d.scrub; $('events').checked = state.events;
+  }
+
+  /* ---------- design check ---------- */
+  function designCheck() {
+    const d = state.design, units = TM.buildUnits(d), out = [];
+    if (!units.length) return [['bad', 'No units have a treatment yet.']];
+    const by = d.treatments.map((t, i) => units.filter(u => u.treatment === i));
+    const used = by.map((u, i) => [u, i]).filter(([u]) => u.length);
+    if (!d.treatments.some((t, i) => TM.isControl(t) && by[i].length)) out.push(['warn', 'No control: nothing to compare the treatments against.']);
+    if (used.length < 2) out.push(['warn', 'Only one treatment is in use, so nothing can be compared. That can still be useful for a baseline or a drift test.']);
+    const singles = used.filter(([u]) => u.length === 1).map(([, i]) => tname(i));
+    if (singles.length) out.push(['bad', `${singles.join(', ')} ${singles.length > 1 ? 'have' : 'has'} only one experimental unit. A treatment effect cannot be separated from that unit's own quirks.`]);
+    if (d.mode === 'tank') {
+      const usedTanks = units.length;
+      if (usedTanks > 1 && used.length > 1) out.push(['bad', 'The three tanks differ in depth (13.7, 24.0 and 21.4 inches of water), light and temperature. With one tank per treatment, tank and treatment are confounded.']);
+      if (d.potsPerTank > 1) out.push(['warn', `The ${d.potsPerTank} pots in a tank share its water. They are subsamples of one unit, not independent replicates.`]);
+    } else {
+      used.forEach(([u, i]) => { const tks = new Set(u.map(x => x.tank)); if (tks.size === 1 && units.some(x => x.tank !== u[0].tank)) out.push(['warn', `${tname(i)} sits only in the ${TANKS[u[0].tank].name}. Spread it across tanks so tank differences even out.`]); });
+      const blocked = TANKS.filter((t, ti) => used.every(([u]) => u.some(x => x.tank === ti))).length;
+      if (blocked >= 2) out.push(['good', `${blocked} tanks hold every treatment, so each tank works as a block.`]);
+    }
+    const reps = used.filter(([u]) => u.length >= 2);
+    if (reps.length) out.push(['good', reps.map(([u, i]) => `${tname(i)}: ${u.length} units`).join(' · ')]);
+    if (d.sampling === 'weekly') out.push(['warn', 'Weekly sampling can miss a peroxide pulse or an oxygen crash entirely.']);
+    if (d.topoff === 'never') out.push(['warn', 'Without top-offs, salinity climbs every day in a greenhouse.']);
+    if (d.topoffWater === 'sea' && d.topoff !== 'never') out.push(['warn', 'Evaporation removes only water. Topping off with seawater adds salt each time.']);
+    return out;
+  }
+  function renderChecks() {
+    const icon = { bad: '✕', warn: '!', good: '✓' };
+    $('checks').innerHTML = designCheck().map(([k, t]) => `<div class="${k}"><span class="ic" aria-hidden="true">${icon[k]}</span><span>${t}</span></div>`).join('');
+  }
+
+  /* ---------- dosing ---------- */
+  function unitsForDose() { return TM.buildUnits(state.design); }
+  function needFor(u) { return TM.requiredDose(u.vol, state.design.treatments[u.treatment], state.design.stock); }
+  function renderDoses() {
+    const units = unitsForDose(), stud = state.studentDoses, lock = started();
+    const stockLabel = state.design.stock === '3' ? '3%' : '35%';
+    $('doseNote').textContent = stud ? `Enter the amount to add to each unit on dosing days. Whatever you enter is what goes into the water, mistakes included. Peroxide stock is ${stockLabel}.`
+      : `Amounts to add on each dosing day, from the target concentrations and each unit's volume. Peroxide stock is ${stockLabel}.` + (state.design.mode === 'container' ? ' Amounts this small are easier to measure from a stock solution: dissolve 1 g of salt in 100 mL, and every 10 mg is then 1 mL.' : '');
+    $('doseCheckHead').hidden = !stud; $('doseBtns').hidden = !stud;
+    const cell = (u, k, need, d, unit, applies) => {
+      if (!applies) return '<td class="num">—</td>';
+      if (!stud) return unit === 'g' && need < 0.1 ? `<td class="num">${fmt(need * 1000, need < 0.01 ? 1 : 0)} mg</td>` : `<td class="num">${fmt(need, d)} ${unit}</td>`;
+      const v = state.doseInputs[u.id] && state.doseInputs[u.id][k];
+      return `<td class="num"><input type="number" min="0" step="any" id="dz_${u.id}_${k}" value="${v ?? ''}" ${lock ? 'disabled' : ''} aria-label="${k} for ${u.label}"> ${unit}</td>`;
+    };
+    $('doseBody').innerHTML = units.length ? units.map(u => {
+      const tr = state.design.treatments[u.treatment], need = needFor(u);
+      return `<tr><td>${u.label}</td><td><span class="dot" style="background:${tcolor(u.treatment)}"></span> ${tname(u.treatment)}</td>
+        <td class="num">${u.vol >= 100 ? fmt(u.vol / GAL, 0) + ' gal' : fmt(u.vol, 0) + ' L'}</td>
+        ${cell(u, 'h2o2_mL', need.h2o2_mL, need.h2o2_mL < 10 ? 1 : 0, 'mL', tr.h2o2 > 0)}
+        ${cell(u, 'nano3_g', need.nano3_g, 2, 'g', tr.n > 0)}
+        ${cell(u, 'kh2po4_g', need.kh2po4_g, 3, 'g', tr.p > 0)}
+        ${stud ? `<td id="dc_${u.id}"></td>` : ''}</tr>`;
+    }).join('') : '<tr><td colspan="7" class="note">No units yet.</td></tr>';
+    if (stud) units.forEach(u => ['h2o2_mL', 'nano3_g', 'kh2po4_g'].forEach(k => { const el = $(`dz_${u.id}_${k}`); if (el) el.addEventListener('change', e => { (state.doseInputs[u.id] = state.doseInputs[u.id] || {})[k] = e.target.value === '' ? '' : +e.target.value; designChanged(true); }); }));
+  }
+  function checkDoses() {
+    let bad = 0, n = 0;
+    unitsForDose().forEach(u => {
+      const tr = state.design.treatments[u.treatment], need = needFor(u), inp = state.doseInputs[u.id] || {}, errs = [];
+      [['h2o2_mL', tr.h2o2 > 0, 'H₂O₂'], ['nano3_g', tr.n > 0, 'NaNO₃'], ['kh2po4_g', tr.p > 0, 'KH₂PO₄']].forEach(([k, applies, nm]) => {
+        if (!applies) return; n++;
+        const v = +inp[k]; if (!(v > 0)) { errs.push(`${nm} missing`); return; }
+        const off = (v - need[k]) / need[k] * 100; if (Math.abs(off) > 10) errs.push(`${nm} ${off > 0 ? '+' : '−'}${fmt(Math.abs(off), 0)}%`);
+      });
+      bad += errs.length;
+      const el = $('dc_' + u.id); if (el) el.innerHTML = errs.length ? `<span class="off">${errs.join(', ')}</span>` : '<span class="ok">✓</span>';
+    });
+    $('doseStatus').textContent = n === 0 ? 'Nothing to dose in this design.' : bad ? `${bad} amount${bad > 1 ? 's are' : ' is'} more than 10% off or missing. Rework the math, or run it anyway and see what happens.` : 'All doses within 10%.';
+  }
+  function fillDoses() {
+    unitsForDose().forEach(u => { const need = needFor(u); state.doseInputs[u.id] = { h2o2_mL: +need.h2o2_mL.toFixed(2), nano3_g: +need.nano3_g.toFixed(3), kh2po4_g: +need.kh2po4_g.toFixed(4) }; });
+    renderDoses(); designChanged(true); checkDoses();
+  }
+
+  /* ---------- experiment ---------- */
+  function designForModel() {
+    const d = clone(state.design);
+    if (state.studentDoses) { d.doses = {}; unitsForDose().forEach(u => { const inp = state.doseInputs[u.id] || {}; d.doses[u.id] = { h2o2_mL: +inp.h2o2_mL || 0, nano3_g: +inp.nano3_g || 0, kh2po4_g: +inp.kh2po4_g || 0 }; }); }
+    return d;
+  }
+  function designChanged(keepDoseTable) {
+    if (started()) return;
+    newExperiment(keepDoseTable);
+  }
+  function newExperiment(keepDoseTable) {
+    state.ex = TM.createExperiment(designForModel(), { seed: state.seed, events: state.events });
+    state.sel = Math.min(state.sel, Math.max(0, state.ex.units.length - 1));
+    $('doseStatus').textContent = '';
+    renderChecks();
+    if (!keepDoseTable) renderDoses();
+    renderAll();
+  }
+  function run(n) {
+    const ex = state.ex; if (!ex || !ex.units.length || ex.done) return;
+    const first = !started();
+    for (let i = 0; i < n && !ex.done; i++) TM.simulateDay(ex);
+    if (first) { renderDoses(); }
+    renderAll();
+  }
+
+  /* ---------- controls ---------- */
+  function renderControls() {
+    const ex = state.ex, D = state.design.days, day = ex ? ex.day : 0, done = ex && ex.done, empty = !ex || !ex.units.length;
+    $('designSet').disabled = started();
+    document.querySelectorAll('[data-preset]').forEach(b => b.disabled = started());
+    $('studentDoses').disabled = started();
+    $('dayBig').textContent = `Day ${day}`;
+    $('dayLabel').textContent = !started() ? 'Experiment not started' : done ? `Finished after ${D} days` : `Week ${Math.floor(day / 7) + 1} · ${D - day} days left`;
+    const wk = D / 7; $('ticks').innerHTML = Array.from({ length: wk }, (_, i) => `<span><i style="width:${Math.max(0, Math.min(1, (day - i * 7) / 7)) * 100}%"></i></span>`).join('');
+    $('runDay').textContent = done ? 'Finished' : started() ? `Run day ${day + 1}` : 'Start day 1';
+    ['runDay', 'runWeek', 'runAll'].forEach(id => $(id).disabled = done || empty);
+    $('seedText').textContent = '#' + state.seed;
+    $('runStatus').textContent = empty ? 'Assign at least one treatment to a tank or container.' :
+      !started() ? 'Day 0 is measured, dosed and ready. The design locks once day 1 runs.' :
+      done ? 'Analyze below, or start a new experiment with the same design.' : 'Measurements appear on sampling days.';
+  }
+
+  /* ---------- unit picker and readout ---------- */
+  function renderPicker() {
+    const units = state.ex.units;
+    $('unitPick').innerHTML = units.map((u, i) => `<button type="button" aria-pressed="${i === state.sel}" data-unit="${i}"><span class="dot" style="background:${tcolor(u.treatment)}"></span>${u.id}</button>`).join('');
+    $('unitPick').querySelectorAll('[data-unit]').forEach(b => b.addEventListener('click', () => selectUnit(+b.dataset.unit)));
+  }
+  function selectUnit(i) { state.sel = i; renderPicker(); renderReadout(); updateScene(); }
+  function renderReadout() {
+    const u = state.ex.units[state.sel];
+    if (!u) { $('unitTitle').textContent = 'Greenhouse'; $('unitSub').textContent = ''; $('readout').innerHTML = '<div><span class="label">No units</span><span class="v">—</span></div>'; return; }
+    const s = u.samples[u.samples.length - 1];
+    $('unitTitle').textContent = u.label;
+    $('unitSub').textContent = `${tlabel(u.treatment)} · ${u.vol >= 100 ? fmt(u.vol / GAL, 0) + ' gal' : u.vol + ' L'} · last sampled day ${s.day}`;
+    const cls = (k, v) => k === 'DO' ? (v < 2 ? 'bad' : v < 4 ? 'warn' : '') : k === 'S' ? (v > 40 ? 'bad' : v > 36 ? 'warn' : '') : k === 'H2O2' ? (v >= 10 ? 'bad' : '') : '';
+    const items = [
+      ['Shoots per pot', fmt(s.shoots.reduce((a, b) => a + b, 0) / s.shoots.length, 1), ''],
+      ['Nitrate-N', fmt(s.N, 2) + ' mg/L', ''], ['Phosphate-P', fmt(s.P, 3) + ' mg/L', ''],
+      ['Salinity', fmt(s.S, 0) + ' ppt', cls('S', s.S)], ['Dissolved O₂', fmt(s.DO, 1) + ' mg/L', cls('DO', s.DO)],
+      ['Magnesium', fmt(s.Mg, 0) + ' mg/L', ''], ['Temperature', fmt(s.T, 1) + ' °C', s.T > 32 ? 'warn' : ''],
+      ['Peroxide strip', fmt(s.H2O2, s.H2O2 % 1 ? 1 : 0) + ' mg/L', cls('H2O2', s.H2O2)],
+      ['Water', s.water, s.water === 'Very green' ? 'bad' : s.water === 'Green' ? 'warn' : ''], ['Walls', s.film, s.film === 'Heavy film' ? 'warn' : '']
+    ];
+    $('readout').innerHTML = items.map(([l, v, c]) => `<div class="${c}"><span class="label">${l}</span><span class="v">${v}</span></div>`).join('');
+  }
+
+  /* ---------- charts ---------- */
+  function niceStep(range, n) { const raw = range / n || 1, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+  const sampleVal = (s, k) => k === 'shoots' ? s.shoots.reduce((a, b) => a + b, 0) / s.shoots.length : s[k];
+  function drawChart(idx) {
+    const k = state.vars[idx], V = VARS[k], el = $('ch' + idx), W = Math.max(260, el.clientWidth), H = 230, m = { l: 48, r: 12, t: 10, b: 34 };
+    const units = state.ex.units, D = state.design.days;
+    const series = units.map(u => ({ u, pts: u.samples.map(s => [s.day, sampleVal(s, k)]), truth: u.daily.map(x => [x.day, k === 'H2O2' ? x.H2O2 : x[k]]) }));
+    const all = []; series.forEach(s => { s.pts.forEach(p => all.push(p[1])); if (state.truth) s.truth.forEach(p => all.push(p[1])); });
+    let lo = V.min0 ? 0 : Math.min(...all), hi = Math.max(...all);
+    if (!isFinite(lo)) { lo = 0; hi = 1; }
+    if (hi - lo < 1e-6) { hi = lo + (Math.abs(lo) * 0.1 || 1); }
+    const st = niceStep(hi - lo, 4); lo = Math.floor(lo / st) * st; hi = Math.ceil(hi / st) * st;
+    const X = x => m.l + x / D * (W - m.l - m.r), Y = y => H - m.b - (y - lo) / (hi - lo) * (H - m.t - m.b);
+    const dd = st < 0.01 ? 3 : st < 0.1 ? 2 : st < 1 ? 1 : 0;
+    let s = `<svg width="${W}" height="${H}" role="img" aria-label="${V.label} over time for each unit">`;
+    for (let v = lo; v <= hi + st / 2; v += st) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:var(--line)"/><text x="${m.l - 6}" y="${Y(v)}" text-anchor="end" dominant-baseline="middle" style="fill:var(--muted);font:11px var(--font-data)">${fmt(v, dd)}</text>`;
+    const xs = W < 420 ? 14 : 7;
+    for (let v = 0; v <= D; v += xs) s += `<text x="${X(v)}" y="${H - m.b + 15}" text-anchor="middle" style="fill:var(--muted);font:11px var(--font-data)">${v}</text>`;
+    s += `<text x="${(W + m.l) / 2}" y="${H - 3}" text-anchor="middle" style="fill:var(--muted);font:11px var(--font-body)">day</text>`;
+    if (k === 'DO') s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(2)}" y2="${Y(2)}" style="stroke:var(--bad)" stroke-dasharray="4 4" opacity="0.7"/>`;
+    if (k === 'S' && hi > 40) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(40)}" y2="${Y(40)}" style="stroke:var(--bad)" stroke-dasharray="4 4" opacity="0.7"/>`;
+    series.forEach(se => {
+      const c = tcolor(se.u.treatment), selected = state.ex.units[state.sel] === se.u;
+      if (state.truth && se.truth.length > 1) s += `<polyline points="${se.truth.map(p => `${X(p[0])},${Y(p[1])}`).join(' ')}" fill="none" style="stroke:${c}" stroke-width="1" opacity="0.35"/>`;
+      if (se.pts.length > 1) s += `<polyline points="${se.pts.map(p => `${X(p[0])},${Y(p[1])}`).join(' ')}" fill="none" style="stroke:${c}" stroke-width="${selected ? 2.6 : 1.6}" stroke-linejoin="round" opacity="${selected ? 1 : 0.8}"/>`;
+      se.pts.forEach(p => { s += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${selected ? 3.2 : 2.4}" style="fill:${c}"/>`; });
+    });
+    el.innerHTML = s + '</svg>';
+    const used = [...new Set(units.map(u => u.treatment))].sort((a, b) => a - b);
+    $('lg' + idx).innerHTML = used.map(i => `<span><span class="dot" style="background:${tcolor(i)}"></span>${tlabel(i)}</span>`).join('') + (k === 'DO' ? '<span>Dashed line: 2 mg/L, stressful for seagrass</span>' : '') + (state.truth ? '<span>Faint lines: true daily values</span>' : '');
+  }
+  function renderCharts() { if (!state.ex.units.length) { ['ch0', 'ch1'].forEach(id => $(id).innerHTML = '<p class="note">No units to plot.</p>'); return; } drawChart(0); drawChart(1); }
+
+  /* ---------- stats ---------- */
+  const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+  const sd = a => { if (a.length < 2) return NaN; const mu = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - mu) * (x - mu), 0) / (a.length - 1)); };
+  function betacf(a, b, x) { const FP = 1e-300; let qab = a + b, qap = a + 1, qam = a - 1, c = 1, d = 1 - qab * x / qap; if (Math.abs(d) < FP) d = FP; d = 1 / d; let h = d; for (let m = 1; m <= 200; m++) { const m2 = 2 * m; let aa = m * (b - m) * x / ((qam + m2) * (a + m2)); d = 1 + aa * d; if (Math.abs(d) < FP) d = FP; c = 1 + aa / c; if (Math.abs(c) < FP) c = FP; d = 1 / d; h *= d * c; aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2)); d = 1 + aa * d; if (Math.abs(d) < FP) d = FP; c = 1 + aa / c; if (Math.abs(c) < FP) c = FP; d = 1 / d; const del = d * c; h *= del; if (Math.abs(del - 1) < 3e-12) break; } return h; }
+  function lgamma(x) { const c = [76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5]; let y = x, t = x + 5.5; t -= (x + 0.5) * Math.log(t); let s = 1.000000000190015; for (let j = 0; j < 6; j++) s += c[j] / ++y; return -t + Math.log(2.5066282746310005 * s / x); }
+  function ibeta(x, a, b) { if (x <= 0) return 0; if (x >= 1) return 1; const bt = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b) + a * Math.log(x) + b * Math.log(1 - x)); return x < (a + 1) / (a + b + 2) ? bt * betacf(a, b, x) / a : 1 - bt * betacf(b, a, 1 - x) / b; }
+  const pT = (t, df) => isFinite(t) && df > 0 ? ibeta(df / (df + t * t), df / 2, 0.5) : NaN;
+  function welch(A, B) { const va = sd(A) ** 2 / A.length, vb = sd(B) ** 2 / B.length; const t = (mean(A) - mean(B)) / Math.sqrt(va + vb); const df = (va + vb) ** 2 / (va * va / (A.length - 1) + vb * vb / (B.length - 1)); return { t, df, p: pT(t, df) }; }
+  function paired(diffs) { const n = diffs.length, t = mean(diffs) / (sd(diffs) / Math.sqrt(n)); return { t, df: n - 1, p: pT(t, n - 1) }; }
+  const fp = p => !isFinite(p) ? '—' : p < 0.001 ? '< 0.001' : fmt(p, 3);
+
+  function startIdx(u) { const from = state.growthFrom; let i = u.samples.findIndex(s => s.day >= from); if (i < 0 || i >= u.samples.length - 1) i = 0; return i; }
+  function potGrowth(u) {
+    const i0 = startIdx(u), a = u.samples[i0], b = u.samples[u.samples.length - 1], dt = (b.day - a.day) / 7;
+    if (dt <= 0) return u.pots.map(() => null);
+    return a.shoots.map((s0, k) => Math.log((b.shoots[k] + 0.5) / (s0 + 0.5)) / dt);
+  }
+  function unitMetric(u, m) {
+    const S = u.samples;
+    if (m === 'growth') { const g = potGrowth(u).filter(x => x != null); return g.length ? mean(g) : null; }
+    if (m === 'minDO') return Math.min(...S.slice(1).map(s => s.DO).concat(S.length === 1 ? [S[0].DO] : []));
+    if (m === 'meanN') return mean(S.slice(1).length ? S.slice(1).map(s => s.N) : [S[0].N]);
+    if (m === 'meanP') return mean(S.slice(1).length ? S.slice(1).map(s => s.P) : [S[0].P]);
+    if (m === 'lastS') return S[S.length - 1].S;
+  }
+
+  /* ---------- results & comparison ---------- */
+  function renderResults() {
+    const units = state.ex.units;
+    $('resultBody').innerHTML = units.length ? units.map(u => {
+      const S = u.samples, a = S[startIdx(u)], b = S[S.length - 1];
+      const pm = arr => arr.reduce((x, y) => x + y, 0) / arr.length;
+      return `<tr><td>${u.label}</td><td><span class="dot" style="background:${tcolor(u.treatment)}"></span> ${tname(u.treatment)}</td><td class="num">${u.pots.length}</td>
+        <td class="num">${fmt(pm(a.shoots), 1)} → ${fmt(pm(b.shoots), 1)}</td><td class="num">${fmt(unitMetric(u, 'growth'), 3)}</td>
+        <td class="num">${fmt(unitMetric(u, 'minDO'), 1)}</td><td class="num">${fmt(unitMetric(u, 'meanN'), 2)}</td><td class="num">${fmt(unitMetric(u, 'meanP'), 3)}</td>
+        <td class="num">${fmt(b.S, 0)}</td><td class="num">${fmt(b.Mg, 0)}</td></tr>`;
+    }).join('') : '<tr><td colspan="10" class="note">No units.</td></tr>';
+    const used = [...new Set(units.map(u => u.treatment))].sort((x, y) => x - y);
+    const opts = used.map(i => `<option value="${i}">${tlabel(i)}</option>`).join('');
+    const a = $('cmpA').value, b = $('cmpB').value;
+    $('cmpA').innerHTML = opts; $('cmpB').innerHTML = opts;
+    if (used.includes(+a) && a !== '') $('cmpA').value = a; else if (used.length) $('cmpA').value = String(used[0]);
+    if (used.includes(+b) && b !== '') $('cmpB').value = b; else if (used.length > 1) $('cmpB').value = String(used[1]);
+    renderCompare();
+  }
+  function renderCompare() {
+    const out = $('cmpOut'), units = state.ex.units;
+    if (!started()) { out.innerHTML = '<p class="note">Run the experiment for at least a few days to compare treatments.</p>'; return; }
+    const ia = +$('cmpA').value, ib = +$('cmpB').value, m = $('cmpM').value;
+    if (ia === ib || isNaN(ia) || isNaN(ib)) { out.innerHTML = '<p class="note">Pick two different treatments.</p>'; return; }
+    const UA = units.filter(u => u.treatment === ia), UB = units.filter(u => u.treatment === ib);
+    const A = UA.map(u => unitMetric(u, m)).filter(x => x != null), B = UB.map(u => unitMetric(u, m)).filter(x => x != null);
+    const names = { growth: 'growth (ln shoots per week)', minDO: 'lowest DO (mg/L)', meanN: 'mean nitrate-N (mg/L)', meanP: 'mean phosphate-P (mg/L)', lastS: 'final salinity (ppt)' };
+    const d = m === 'growth' ? 3 : m === 'meanP' ? 3 : m === 'meanN' ? 2 : 1;
+    let html = `<p>Mean ${names[m]}: <b>${tname(ia)}</b> <span class="mono">${fmt(mean(A), d)}</span> from ${A.length} unit${A.length > 1 ? 's' : ''}; <b>${tname(ib)}</b> <span class="mono">${fmt(mean(B), d)}</span> from ${B.length} unit${B.length > 1 ? 's' : ''}.</p>`;
+    if (A.length >= 2 && B.length >= 2) {
+      const w = welch(A, B);
+      html += `<div class="box"><span class="label">Units as replicates (Welch t-test)</span><p class="mono">t = ${fmt(w.t, 2)}, df = ${fmt(w.df, 1)}, p = ${fp(w.p)}</p><p>${w.p < 0.05 ? 'The difference is unlikely to be chance.' : 'The difference could easily be chance with this many units.'}</p></div>`;
+      const tanksA = new Set(UA.map(u => u.tank)), tanksB = new Set(UB.map(u => u.tank));
+      const shared = [...tanksA].filter(t => tanksB.has(t));
+      if (shared.length >= 2) {
+        const diffs = shared.map(t => mean(UA.filter(u => u.tank === t).map(u => unitMetric(u, m))) - mean(UB.filter(u => u.tank === t).map(u => unitMetric(u, m))));
+        const pr = paired(diffs);
+        html += `<div class="box"><span class="label">Blocked by tank (paired across ${shared.length} tanks)</span><p class="mono">t = ${fmt(pr.t, 2)}, df = ${pr.df}, p = ${fp(pr.p)}</p><p>Compares the two treatments inside each tank, which removes differences between tanks. With only ${shared.length} tanks this test has little power.</p></div>`;
+      } else if (shared.length === 0) html += `<div class="box bad"><p>${tname(ia)} and ${tname(ib)} never share a tank, so any tank difference is mixed into this comparison.</p></div>`;
+    } else {
+      html += `<div class="box bad"><span class="label">No valid test</span><p>${A.length < 2 ? tname(ia) : tname(ib)} has only one experimental unit. With one unit there is no way to tell a treatment effect from the differences between ${state.design.mode === 'tank' ? 'tanks' : 'containers'}.</p></div>`;
+      if (m === 'growth') {
+        const PA = UA.flatMap(potGrowth).filter(x => x != null), PB = UB.flatMap(potGrowth).filter(x => x != null);
+        if (PA.length >= 2 && PB.length >= 2) {
+          const w = welch(PA, PB);
+          html += `<div class="box"><span class="label">What pseudoreplication would report</span><p class="mono">Pots as replicates: n = ${PA.length} vs ${PB.length}, t = ${fmt(w.t, 2)}, p = ${fp(w.p)}</p><p>This looks like a real test, but the pots in one tank share its water, light and temperature. They are not independent, so this p-value ${w.p < 0.05 ? 'overstates the evidence' : 'means little either way'}.</p></div>`;
+        }
+      }
+    }
+    out.innerHTML = html;
+  }
+
+  /* ---------- notebook ---------- */
+  function renderLog() {
+    const ex = state.ex;
+    if (!ex.units.length) { $('log').innerHTML = '<p class="note">No units.</p>'; return; }
+    const items = ex.log.slice();
+    const dosed = ex.units.flatMap(u => u.doses.map(d => ({ u, d })));
+    const byDay = {};
+    dosed.forEach(({ u, d }) => (byDay[d.day] = byDay[d.day] || []).push(u.id));
+    Object.entries(byDay).forEach(([day, ids]) => items.push({ day: +day, kind: 'good', text: `Dosed ${ids.join(', ')}.` }));
+    items.push({ day: 0, kind: 'good', text: `Planted ${ex.units.reduce((s, u) => s + u.pots.length, 0)} pots of 8 shoots in ${ex.units.length} unit${ex.units.length > 1 ? 's' : ''}; baseline water sampled.` });
+    if (ex.done) items.push({ day: ex.design.days, kind: 'good', text: 'Experiment finished. Final measurements taken.' });
+    items.sort((a, b) => b.day - a.day || (a.kind === 'good') - (b.kind === 'good'));
+    $('log').innerHTML = items.filter(e => e.day <= ex.day).map(e => `<div class="log-item"><span class="w">Day ${e.day}</span><div><span class="pill ${e.kind}">${e.kind === 'bad' ? 'Problem' : e.kind === 'warn' ? 'Watch' : 'Note'}</span>${e.text}</div></div>`).join('');
+  }
+
+  /* ---------- CSV ---------- */
+  function copyCsv() {
+    const maxPots = Math.max(1, ...state.ex.units.map(u => u.pots.length));
+    const rows = [['unit', 'tank', 'treatment', 'treatment_desc', 'day', 'nitrate_N_mgL', 'phosphate_P_mgL', 'salinity_ppt', 'DO_mgL', 'Mg_mgL', 'temp_C', 'H2O2_strip_mgL', 'water', 'walls'].concat(Array.from({ length: maxPots }, (_, k) => `shoots_pot${k + 1}`)).join(',')];
+    state.ex.units.forEach(u => u.samples.forEach(s => rows.push([u.id, TANKS[u.tank].key, tname(u.treatment), `"${TM.treatmentName(u.tr)}"`, s.day, s.N.toFixed(2), s.P.toFixed(3), s.S.toFixed(0), s.DO.toFixed(1), s.Mg.toFixed(0), s.T.toFixed(1), s.H2O2, s.water, s.film].concat(s.shoots).join(','))));
+    const text = rows.join('\n'), ta = $('csvOut'); ta.value = text;
+    const fallback = () => { ta.hidden = false; ta.focus(); ta.select(); $('csvStatus').textContent = 'Select all and copy the data below.'; };
+    try { navigator.clipboard.writeText(text).then(() => { $('csvStatus').textContent = `Copied ${rows.length - 1} rows. Paste into a spreadsheet.`; }, fallback); } catch (e) { fallback(); }
+  }
+
+  /* ---------- 3D greenhouse ---------- */
+  const view = { ok: false };
+  function initThree() {
+    const box = $('scene');
+    if (!window.THREE) { box.insertAdjacentHTML('beforeend', '<div class="fallback">The 3D view could not load. Everything else on the page still works.</div>'); return; }
+    let renderer;
+    try { renderer = new THREE.WebGLRenderer({ antialias: true }); } catch (e) { box.insertAdjacentHTML('beforeend', '<div class="fallback">This browser cannot show the 3D greenhouse. Everything else on the page still works.</div>'); return; }
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    box.prepend(renderer.domElement);
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(34, 16 / 7, 0.05, 60);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x7a6c50, 0.6), sun = new THREE.DirectionalLight(0xfff4e0, 0.9); sun.position.set(2, 6, 3);
+    scene.add(hemi, sun);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 5), new THREE.MeshLambertMaterial({ color: 0xa69d88 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    // greenhouse frame
+    const frameMat = new THREE.LineBasicMaterial({ color: 0x9fb0ab });
+    for (let i = -4; i <= 4; i += 1.6) { const pts = []; for (let a = 0; a <= 20; a++) { const th = Math.PI * a / 20; pts.push(new THREE.Vector3(i, 2.2 * Math.sin(th) + 0.4, -2.2 * Math.cos(th))); } scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), frameMat)); }
+    const xs = [-1.85, 0.3, 1.85];
+    const tankObjs = TANKS.map((t, ti) => {
+      const g = new THREE.Group(); g.position.set(xs[ti], 0, 0); scene.add(g);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(t.Lm + 0.05, 0.05, t.Wm + 0.05), new THREE.MeshLambertMaterial({ color: 0x55605c })); base.position.y = 0.025; g.add(base);
+      const sand = new THREE.Mesh(new THREE.BoxGeometry(t.Lm - 0.01, 0.02, t.Wm - 0.01), new THREE.MeshLambertMaterial({ color: 0xd2bf93 })); sand.position.y = 0.06; g.add(sand);
+      const waterMat = new THREE.MeshLambertMaterial({ color: 0x8fd0db, transparent: true, opacity: 0.25, depthWrite: false });
+      const water = new THREE.Mesh(new THREE.BoxGeometry(t.Lm - 0.008, 1, t.Wm - 0.008), waterMat); water.renderOrder = 2; g.add(water);
+      const glassMat = new THREE.MeshLambertMaterial({ color: 0xd8eef3, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide });
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(t.Lm, t.Hm, t.Wm), glassMat); glass.position.y = 0.05 + t.Hm / 2; glass.renderOrder = 3; glass.userData = { tank: ti }; g.add(glass);
+      const edgeMat = new THREE.LineBasicMaterial({ color: 0x8fb0b8 });
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(t.Lm, t.Hm, t.Wm)), edgeMat); edges.position.y = glass.position.y; g.add(edges);
+      return { t, g, water, waterMat, glass, glassMat, edgeMat, containers: [], pots: [] };
+    });
+    const potGeo = new THREE.CylinderGeometry(0.07, 0.06, 0.12, 16), potMat = new THREE.MeshLambertMaterial({ color: 0x2d2a26 });
+    const contGeo = new THREE.CylinderGeometry(0.12, 0.11, 0.26, 20, 1, true);
+    const MAXB = 7000, bladeGeo = new THREE.PlaneGeometry(0.005, 1, 1, 4); bladeGeo.translate(0, 0.5, 0);
+    const timeU = { value: 0 };
+    const bladeMat = new THREE.MeshLambertMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    bladeMat.onBeforeCompile = sh => { sh.uniforms.uTime = timeU; sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      float hh = position.y;
+      #ifdef USE_INSTANCING
+        float ph = instanceMatrix[3].x * 23.0 + instanceMatrix[3].z * 17.0;
+      #else
+        float ph = 0.0;
+      #endif
+      transformed.x += sin(uTime * 1.3 + ph) * 0.02 * hh * hh;`); };
+    const blades = new THREE.InstancedMesh(bladeGeo, bladeMat, MAXB); blades.count = 0; blades.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(MAXB * 3), 3); scene.add(blades);
+    const dynamic = new THREE.Group(); scene.add(dynamic);
+    const selRing = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.18, 32), new THREE.MeshBasicMaterial({ color: 0x1c6a82, side: THREE.DoubleSide })); selRing.rotation.x = -Math.PI / 2; scene.add(selRing);
+    const labels = TANKS.map(t => { const el = document.createElement('span'); el.className = 'tlabel'; el.textContent = t.name; box.appendChild(el); return el; });
+    const cam = { az: 0.35, el: 0.5, dist: 5.4 }, target = new THREE.Vector3(0, 0.25, 0);
+    function placeCam() { camera.position.set(target.x + cam.dist * Math.cos(cam.el) * Math.sin(cam.az), target.y + cam.dist * Math.sin(cam.el), target.z + cam.dist * Math.cos(cam.el) * Math.cos(cam.az)); camera.lookAt(target); }
+    placeCam();
+    let drag = null, moved = 0;
+    const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+    renderer.domElement.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, touch: e.pointerType === 'touch' }; moved = 0; });
+    window.addEventListener('pointermove', e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; moved += Math.abs(dx) + Math.abs(dy); cam.az -= dx * 0.006; if (!drag.touch) cam.el = Math.max(0.12, Math.min(1.35, cam.el + dy * 0.005)); drag.x = e.clientX; drag.y = e.clientY; placeCam(); kick(); });
+    window.addEventListener('pointerup', e => {
+      if (drag && moved < 6 && e.target === renderer.domElement) {
+        const r = renderer.domElement.getBoundingClientRect(); mouse.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+        ray.setFromCamera(mouse, camera);
+        const hits = ray.intersectObjects(dynamic.children.filter(o => o.userData.unit != null).concat(tankObjs.map(o => o.glass)));
+        for (const h of hits) {
+          const ud = h.object.userData;
+          if (ud.unit != null) { selectUnit(ud.unit); break; }
+          if (ud.tank != null) { const i = state.ex.units.findIndex(u => u.tank === ud.tank); if (i >= 0) { selectUnit(i); break; } }
+        }
+      }
+      drag = null;
+    });
+    renderer.domElement.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(2.5, Math.min(9, cam.dist * (1 + Math.sign(e.deltaY) * 0.08))); placeCam(); kick(); }, { passive: false });
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let visible = true, raf = 0, lastKick = 0;
+    function kick() { lastKick = performance.now(); if (!raf) raf = requestAnimationFrame(loop); }
+    function placeLabels() {
+      const w = box.clientWidth, h = box.clientHeight;
+      tankObjs.forEach((o, i) => { const v = new THREE.Vector3(o.g.position.x, 0.05 + o.t.Hm + 0.08, 0).project(camera); labels[i].style.left = ((v.x + 1) / 2 * w) + 'px'; labels[i].style.top = ((1 - v.y) / 2 * h) + 'px'; labels[i].hidden = v.z > 1; });
+    }
+    function loop(ts) { raf = 0; if (!reduce) timeU.value = ts / 1000; renderer.render(scene, camera); placeLabels(); if (visible && (!reduce || performance.now() - lastKick < 300)) raf = requestAnimationFrame(loop); }
+    if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; if (visible) kick(); }).observe(box);
+    function resize() { const w = box.clientWidth, h = box.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); cam.dist = w / h < 1.6 ? 7.2 : 5.4; placeCam(); kick(); }
+    if ('ResizeObserver' in window) new ResizeObserver(resize).observe(box); else window.addEventListener('resize', resize);
+    resize();
+    const col = (a, b, t) => new THREE.Color(a).lerp(new THREE.Color(b), Math.max(0, Math.min(1, t)));
+    const waterColor = A => col(0x8fd0db, 0x6f8d2f, (A - 3) / 40);
+    const hsh = (i, s) => { let x = Math.imul(i + 1, 2654435761) ^ Math.imul(s + 1, 1597334677); x ^= x >>> 15; x = Math.imul(x, 2246822519); x ^= x >>> 13; return (x >>> 0) / 4294967296; };
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), e3 = new THREE.Euler(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    view.update = function () {
+      const ex = state.ex; if (!ex) return;
+      scene.background = new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue('--scene-bg').trim() || '#dfe8e4');
+      while (dynamic.children.length) { const c = dynamic.children.pop(); if (c.material && c.material.dispose && c.userData.own) c.material.dispose(); }
+      const units = ex.units, cur = u => u.daily[u.daily.length - 1];
+      let nb = 0;
+      const addBlades = (x, y, z, shoots, spread, health, F, seedBase) => {
+        const n = Math.min(120, Math.round(shoots * 2));
+        const c = col(0x4f9e40, 0x8a7a3c, F * 1.6 + (1 - health) * 0.6);
+        for (let i = 0; i < n && nb < MAXB; i++) {
+          const r = spread * Math.sqrt(hsh(i, seedBase)), a = 6.283 * hsh(i, seedBase + 1);
+          pos.set(x + r * Math.cos(a), y, z + r * Math.sin(a));
+          e3.set((hsh(i, seedBase + 2) - 0.5) * 0.4, 6.283 * hsh(i, seedBase + 3), (hsh(i, seedBase + 4) - 0.5) * 0.4); q.setFromEuler(e3);
+          scl.set(1, (0.07 + 0.08 * health) * (0.7 + 0.6 * hsh(i, seedBase + 5)), 1);
+          mtx.compose(pos, q, scl); blades.setMatrixAt(nb, mtx); blades.setColorAt(nb, c); nb++;
+        }
+      };
+      const selU = units[state.sel];
+      tankObjs.forEach((o, ti) => {
+        const t = o.t, inTank = units.filter(u => u.tank === ti);
+        const tankUnit = ex.design.mode === 'tank' ? inTank[0] : null;
+        const level = tankUnit ? cur(tankUnit).level : 1;
+        const wd = t.depth * level; o.water.scale.y = wd; o.water.position.y = 0.07 + wd / 2;
+        const A = tankUnit ? cur(tankUnit).A : 3, F = tankUnit ? cur(tankUnit).F : 0.05;
+        o.waterMat.color = waterColor(A); o.waterMat.opacity = 0.18 + 0.4 * Math.min(1, (A - 3) / 50);
+        o.glassMat.color = col(0xd8eef3, 0x6f7f2f, F * 1.4); o.glassMat.opacity = 0.08 + 0.3 * F;
+        o.edgeMat.color = new THREE.Color(selU && selU.tank === ti && ex.design.mode === 'tank' ? 0x1c6a82 : 0x8fb0b8);
+        labels[ti].style.opacity = inTank.length ? 1 : 0.5;
+        if (ex.design.mode === 'tank' && tankUnit) {
+          const n = tankUnit.pots.length, cols = Math.min(n, ti === 0 ? 4 : 4), rows = Math.ceil(n / cols);
+          tankUnit.pots.forEach((pt, k) => {
+            const cx = (k % cols + 0.5) / cols - 0.5, cz = (Math.floor(k / cols) + 0.5) / rows - 0.5;
+            const x = o.g.position.x + cx * (t.Lm - 0.3), z = cz * (t.Wm - 0.25);
+            const pot = new THREE.Mesh(potGeo, potMat); pot.position.set(x, 0.07 + 0.06, z); dynamic.add(pot);
+            const health = Math.max(0, Math.min(1, (tankUnit.Ileaf || 50) / 55));
+            addBlades(x, 0.19, z, pt.s, 0.055, health, F, ti * 100 + k * 10);
+          });
+        } else if (ex.design.mode === 'container') {
+          const cap = t.cap, cols = ti === 0 ? 6 : ti === 1 ? 3 : 4, rows = Math.ceil(cap / cols);
+          inTank.forEach(u => {
+            const k = u.slot, cx = (k % cols + 0.5) / cols - 0.5, cz = (Math.floor(k / cols) + 0.5) / rows - 0.5;
+            const x = o.g.position.x + cx * (t.Lm - 0.2), z = cz * (t.Wm - 0.2), c = cur(u);
+            const shell = new THREE.Mesh(contGeo, new THREE.MeshLambertMaterial({ color: 0xe8f0ee, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false })); shell.userData = { unit: units.indexOf(u), own: 1 }; shell.position.set(x, 0.07 + 0.13, z); dynamic.add(shell);
+            const wh = 0.22 * c.level, wm = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.105, wh, 20), new THREE.MeshLambertMaterial({ color: waterColor(c.A), transparent: true, opacity: 0.3 + 0.4 * Math.min(1, (c.A - 3) / 50), depthWrite: false }));
+            wm.userData = { unit: units.indexOf(u), own: 1 }; wm.position.set(x, 0.07 + wh / 2, z); wm.renderOrder = 2; dynamic.add(wm);
+            const pot = new THREE.Mesh(potGeo, potMat); pot.scale.set(0.9, 0.8, 0.9); pot.position.set(x, 0.07 + 0.05, z); dynamic.add(pot);
+            const health = Math.max(0, Math.min(1, (u.Ileaf || 50) / 55));
+            addBlades(x, 0.17, z, u.pots[0].s, 0.05, health, c.F, ti * 100 + k * 10 + 5);
+          });
+        }
+      });
+      blades.count = nb; blades.instanceMatrix.needsUpdate = true; if (blades.instanceColor) blades.instanceColor.needsUpdate = true;
+      if (selU && ex.design.mode === 'container') { const o = tankObjs[selU.tank], t = o.t, cols = selU.tank === 0 ? 6 : selU.tank === 1 ? 3 : 4, rows = Math.ceil(t.cap / cols), k = selU.slot; selRing.visible = true; selRing.position.set(o.g.position.x + ((k % cols + 0.5) / cols - 0.5) * (t.Lm - 0.2), 0.075, ((Math.floor(k / cols) + 0.5) / rows - 0.5) * (t.Wm - 0.2)); }
+      else selRing.visible = false;
+      kick();
+    };
+    view.ok = true;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', () => view.update());
+    new MutationObserver(() => view.update()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+  function updateScene() { if (view.ok) view.update(); }
+
+  function renderAll() {
+    renderControls(); renderPicker(); renderReadout(); updateScene();
+    renderCharts(); renderResults(); renderLog();
+  }
+
+  /* ---------- wiring ---------- */
+  function fillVarSelects() { [0, 1].forEach(i => { $('var' + i).innerHTML = Object.entries(VARS).map(([k, v]) => `<option value="${k}" ${k === state.vars[i] ? 'selected' : ''}>${v.label} (${v.unit})</option>`).join(''); }); }
+  function loadPreset(name) { state.design = PRESETS[name](); state.sel = 0; state.doseInputs = {}; renderTreatments(); renderLayout(); renderProtocol(); newExperiment(); }
+  function init() {
+    fillVarSelects();
+    renderTreatments(); renderLayout(); renderProtocol();
+    document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => loadPreset(b.dataset.preset)));
+    $('addTreat').addEventListener('click', () => { const d = state.design; if (d.treatments.length >= 6) return; d.treatments.push(Object.assign({}, d.treatments[d.treatments.length - 1])); renderTreatments(); renderLayout(); designChanged(); });
+    document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', e => {
+      const d = state.design; d.mode = e.target.value;
+      if (d.mode === 'container' && !d.containers.some(c => c.length)) d.containers = TANKS.map((t, ti) => { const n = d.treatments.length; return Array.from({ length: Math.min(t.cap, Math.max(n, Math.floor(t.cap / n) * n)) }, (_, j) => j % n); });
+      state.sel = 0; renderLayout(); designChanged();
+    }));
+    PROTO_IDS.forEach(id => $(id).addEventListener('change', e => { state.design[id] = id === 'days' ? +e.target.value : e.target.value; renderChecks(); designChanged(); }));
+    $('aeration').addEventListener('change', e => { state.design.aeration = e.target.checked; designChanged(); });
+    $('scrub').addEventListener('change', e => { state.design.scrub = e.target.checked; designChanged(); });
+    $('events').addEventListener('change', e => { state.events = e.target.checked; designChanged(); });
+    $('newSeed').addEventListener('click', () => { state.seed = 1 + Math.floor(Math.random() * 9999); designChanged(); });
+    $('runDay').addEventListener('click', () => run(1));
+    $('runWeek').addEventListener('click', () => run(7));
+    $('runAll').addEventListener('click', () => run(999));
+    $('reset').addEventListener('click', () => newExperiment());
+    $('studentDoses').addEventListener('change', e => { state.studentDoses = e.target.checked; newExperiment(); });
+    $('checkDoses').addEventListener('click', checkDoses);
+    $('fillDoses').addEventListener('click', fillDoses);
+    [0, 1].forEach(i => $('var' + i).addEventListener('change', e => { state.vars[i] = e.target.value; drawChart(i); }));
+    $('truth').addEventListener('change', e => { state.truth = e.target.checked; renderCharts(); });
+    $('growthFrom').addEventListener('change', e => { state.growthFrom = +e.target.value; renderResults(); });
+    ['cmpA', 'cmpB', 'cmpM'].forEach(id => $(id).addEventListener('change', renderCompare));
+    $('copyCsv').addEventListener('click', copyCsv);
+    initThree();
+    newExperiment();
+    let rt; const onResize = () => { clearTimeout(rt); rt = setTimeout(renderCharts, 120); };
+    if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(document.querySelector('.charts')); else window.addEventListener('resize', onResize);
+  }
+  init();
+})();
+</script>
+
+</body>
+</html>

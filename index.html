@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Lagoon Restoration Simulator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a field-station instrument — decision console on the left, lagoon map and monitoring charts on the right. */
+:root {
+  --bg: #edf1ed;
+  --surface: #fbfcfa;
+  --surface-2: #e3eae5;
+  --ink: #13251e;
+  --muted: #56685f;
+  --line: #ccd8d0;
+  --grass: #2b7547;
+  --water: #1c6a82;
+  --algae: #9b6c17;
+  --shell: #8a5640;
+  --fish: #3c58a3;
+  --good: #2b7547;
+  --warn: #a8740c;
+  --bad: #ad3a2c;
+  --focus: #1c6a82;
+  --map-land: #b9b591;
+  --map-sand: #e3d6ac;
+  --map-ocean: #2f6f99;
+  --map-clear: #4fa2b8;
+  --map-murky: #807a3e;
+  --map-grass: #1e5a2b;
+  --map-bloom: #9a6a1c;
+  --font-display: "Spectral", "Iowan Old Style", Georgia, serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1915; --surface: #15231e; --surface-2: #1c2e27; --ink: #e2ebe6; --muted: #98aba2; --line: #2a3d35;
+    --grass: #63bf84; --water: #62b5cf; --algae: #d8a544; --shell: #d09477; --fish: #93a9ec;
+    --good: #63bf84; --warn: #e0ad44; --bad: #ec7a68; --focus: #62b5cf;
+    --map-land: #4c4c37; --map-sand: #807554; --map-ocean: #173f5c; --map-clear: #2a7f95; --map-murky: #5f5a2b; --map-grass: #2b7a39; --map-bloom: #8a6a24;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1915; --surface: #15231e; --surface-2: #1c2e27; --ink: #e2ebe6; --muted: #98aba2; --line: #2a3d35;
+  --grass: #63bf84; --water: #62b5cf; --algae: #d8a544; --shell: #d09477; --fish: #93a9ec;
+  --good: #63bf84; --warn: #e0ad44; --bad: #ec7a68; --focus: #62b5cf;
+  --map-land: #4c4c37; --map-sand: #807554; --map-ocean: #173f5c; --map-clear: #2a7f95; --map-murky: #5f5a2b; --map-grass: #2b7a39; --map-bloom: #8a6a24;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: 1.3rem; font-weight: 600; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--water); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.eyebrow, .label { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mono { font-family: var(--font-data); font-variant-numeric: tabular-nums; }
+
+/* header */
+.top { padding-block: 28px 18px; }
+.top .wrap { display: grid; gap: 8px; }
+.top h1 { font-size: clamp(2rem, 4.5vw, 3rem); font-weight: 700; letter-spacing: -0.01em; }
+.top .lede { max-width: 68ch; color: var(--muted); }
+.note { font-size: 0.85rem; color: var(--muted); max-width: 72ch; }
+
+/* layout */
+.layout { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start; padding-block: 0 48px; }
+@media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.controls { display: grid; gap: 16px; position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); max-height: calc(100vh - 24px); overflow-y: auto; }
+@media (max-width: 980px) { .controls { position: static; max-height: none; overflow: visible; } }
+.viz { display: grid; gap: 20px; min-width: 0; }
+
+/* decision header */
+.decision { display: grid; gap: 6px; }
+.decision .yr { font-family: var(--font-display); font-size: 2rem; font-weight: 700; line-height: 1; }
+.ticks { display: flex; gap: 3px; flex-wrap: wrap; }
+.ticks span { width: 14px; height: 6px; border-radius: 2px; background: var(--surface-2); border: 1px solid var(--line); }
+.ticks span.done { background: var(--water); border-color: var(--water); }
+
+/* options */
+.opt { display: grid; gap: 4px; padding-block: 10px; border-top: 1px solid var(--line); }
+.opt:first-of-type { border-top: 0; padding-top: 0; }
+.opt-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.opt-head label { font-weight: 600; }
+.opt-head .tag { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; margin-right: 6px; color: var(--surface); }
+.opt-val { font-family: var(--font-data); font-size: 0.95rem; white-space: nowrap; }
+.opt p { font-size: 0.8rem; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--water); }
+.budget { display: grid; gap: 6px; }
+.bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); }
+.bar > div { height: 100%; transition: width .2s; }
+.budget-line { display: flex; justify-content: space-between; font-size: 0.85rem; gap: 8px; }
+
+.btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface-2); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+.btn:hover:not(:disabled) { border-color: var(--water); }
+.btn.primary { background: var(--water); border-color: var(--water); color: var(--surface); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.small { padding: 4px 9px; font-size: 0.8rem; font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.settings { display: grid; gap: 10px; font-size: 0.88rem; }
+.settings .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+select, input[type="number"], input[type="text"] { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+input[type="number"] { width: 6.5em; font-family: var(--font-data); }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 2px; position: relative; overflow: hidden; }
+.stat::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--muted); }
+.stat.good::before { background: var(--good); } .stat.warn::before { background: var(--warn); } .stat.bad::before { background: var(--bad); }
+.stat .v { font-family: var(--font-data); font-size: 1.3rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat .d { font-size: 0.75rem; color: var(--muted); font-family: var(--font-data); }
+
+/* map */
+.mapcard { display: grid; gap: 10px; }
+.mapcard-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.mapbox { position: relative; width: 100%; aspect-ratio: 2.5 / 1; max-width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.mapbox canvas { width: 100%; height: 100%; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 1px solid var(--line); }
+
+/* charts */
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 700px) { .charts { grid-template-columns: minmax(0, 1fr); } }
+.chart { display: grid; gap: 6px; min-width: 0; }
+.chart .plot { width: 100%; min-height: 190px; }
+.chart .clegend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.78rem; color: var(--muted); }
+.chart .clegend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.chart .clegend i.dash { border-top-style: dashed; }
+.chart .sub { font-size: 0.8rem; color: var(--muted); }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 12px; align-content: start; }
+
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+
+.score { display: grid; grid-template-columns: minmax(0, 1fr) 2.6em; gap: 4px 10px; align-items: center; font-size: 0.88rem; }
+.score .track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.score .track div { height: 100%; background: var(--muted); }
+.score.me .name { font-weight: 700; }
+.score.me .track div { background: var(--water); }
+.score .num { font-family: var(--font-data); text-align: right; }
+.rolebox { font-size: 0.85rem; color: var(--muted); }
+
+.log { display: grid; gap: 0; }
+.log-item { display: grid; grid-template-columns: 3.6em minmax(0, 1fr); gap: 10px; padding-block: 8px; border-top: 1px solid var(--line); font-size: 0.86rem; }
+.log-item:first-child { border-top: 0; }
+.log-item .y { font-family: var(--font-data); font-weight: 500; }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; border: 1px solid currentColor; margin-right: 4px; }
+.pill.bad { color: var(--bad); } .pill.warn { color: var(--warn); } .pill.good { color: var(--good); }
+
+details.panel > summary { cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: 1.15rem; list-style-position: outside; }
+details.panel[open] > summary { margin-bottom: 12px; }
+.params { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.param { display: grid; gap: 3px; font-size: 0.85rem; }
+.param span.help { color: var(--muted); font-size: 0.78rem; }
+.prose { display: grid; gap: 10px; max-width: 75ch; font-size: 0.92rem; }
+.prose ol, .prose ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+textarea { width: 100%; min-height: 120px; font-family: var(--font-data); font-size: 0.75rem; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.status { font-size: 0.82rem; color: var(--muted); min-height: 1.2em; }
+.pred input { width: 6.5em; }
+.diff-good { color: var(--good); } .diff-bad { color: var(--bad); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Project FISHES · Grand Challenge</p>
+    <h1>Saving a Lagoon</h1>
+    <p class="lede">Your team has a restoration budget for the next decade. Choose how to spend it each year, then watch nitrogen, water clarity, seagrass and shellfish respond. The starting conditions are the handout's 2018–2024 data.</p>
+    <p class="note">Companion lab: <a href="tank-lab.html">Seagrass Tank Lab</a>, a greenhouse experiment with shoal grass, hydrogen peroxide and nutrients.</p>
+    <p class="note">This is a teaching model of a fictional lagoon built from published Indian River Lagoon relationships. It shows how the pieces connect and how fast they respond. It is not a forecast for any real place.</p>
+  </div>
+</header>
+
+<main class="wrap layout">
+  <aside class="controls panel" aria-label="Restoration decisions">
+    <div class="decision">
+      <span class="label" id="decisionLabel">Next decision</span>
+      <div class="yr" id="nextYear">2025</div>
+      <div class="ticks" id="ticks" aria-hidden="true"></div>
+    </div>
+
+    <div class="budget">
+      <div class="budget-line"><span class="label">Spending this year</span><span class="mono" id="budgetText">$0 of $25M</span></div>
+      <div class="bar" id="budgetBar" aria-hidden="true"></div>
+    </div>
+
+    <div id="options"></div>
+
+    <div class="stack">
+      <span class="label">Quick plans</span>
+      <div class="chips">
+        <button class="btn small" type="button" data-preset="A">Nutrients only</button>
+        <button class="btn small" type="button" data-preset="B">Planting only</button>
+        <button class="btn small" type="button" data-preset="C">Shellfish only</button>
+        <button class="btn small" type="button" data-preset="D">Algae control only</button>
+        <button class="btn small" type="button" data-preset="even">Even split</button>
+        <button class="btn small" type="button" data-preset="zero">Spend nothing</button>
+      </div>
+    </div>
+
+    <div class="btns">
+      <button class="btn primary" type="button" id="runYear">Fund 2025</button>
+      <button class="btn" type="button" id="runAll">Run to the end</button>
+      <button class="btn" type="button" id="reset">Start over</button>
+    </div>
+    <p class="status" id="runStatus" role="status"></p>
+
+    <div class="settings">
+      <span class="label">Settings</span>
+      <div class="row"><label for="role">Your stakeholder role</label>
+        <select id="role">
+          <option>Environmental Scientist</option>
+          <option>Government Official</option>
+          <option>Commercial Fisher</option>
+          <option>Tourism Representative</option>
+          <option>Community Resident</option>
+        </select></div>
+      <div class="row"><label for="horizon">Years to simulate</label>
+        <select id="horizon"><option value="10" selected>10 (to 2034)</option><option value="15">15 (to 2039)</option></select></div>
+      <div class="row"><label><input type="checkbox" id="events" checked> Random weather and blooms</label></div>
+      <div class="row"><span>Weather pattern <span class="mono" id="seedText">#1</span></span><button class="btn small" type="button" id="newSeed">New weather</button></div>
+    </div>
+  </aside>
+
+  <section class="viz">
+    <div class="stats" id="stats"></div>
+
+    <div class="panel mapcard">
+      <div class="mapcard-head">
+        <h2 id="mapTitle">The lagoon in 2024</h2>
+        <span class="note mono" id="mapNote"></span>
+      </div>
+      <div class="mapbox"><canvas id="map" role="img" aria-label="Map of the lagoon showing seagrass beds, water color and shellfish reefs"></canvas></div>
+      <div class="legend">
+        <span><i class="sw" style="background: var(--map-grass)"></i>Seagrass bed</span>
+        <span><i class="sw" style="background: var(--map-clear)"></i>Clear water</span>
+        <span><i class="sw" style="background: var(--map-murky)"></i>Algae-clouded water</span>
+        <span><i class="sw" style="background: var(--shell); border-radius: 50%"></i>Shellfish reef</span>
+        <span>Darker water is deeper. Seagrass grows only where enough light reaches the bottom.</span>
+      </div>
+    </div>
+
+    <div class="charts">
+      <div class="panel chart"><h3>Total nitrogen</h3><p class="sub">mg/L, yearly mean</p><div class="plot" id="chTN"></div><div class="clegend" id="lgTN"></div></div>
+      <div class="panel chart"><h3>Water clarity</h3><p class="sub">Secchi depth, m</p><div class="plot" id="chSec"></div><div class="clegend" id="lgSec"></div></div>
+      <div class="panel chart"><h3>Seagrass</h3><p class="sub">acres; dashed line is the area with enough light</p><div class="plot" id="chSG"></div><div class="clegend" id="lgSG"></div></div>
+      <div class="panel chart"><h3>Shellfish and fish</h3><p class="sub">population index, 2018 = 100</p><div class="plot" id="chBio"></div><div class="clegend" id="lgBio"></div></div>
+    </div>
+
+    <div class="two">
+      <div class="panel stack">
+        <h2>Predict the future</h2>
+        <p class="note">Enter your team's predictions before you run. They fill in as the years arrive.</p>
+        <div class="tablewrap"><table class="pred">
+          <thead><tr><th></th><th>Seagrass (acres)</th><th>Clarity (m)</th></tr></thead>
+          <tbody id="predBody"></tbody>
+        </table></div>
+      </div>
+      <div class="panel stack">
+        <h2>Stakeholder scorecard</h2>
+        <p class="rolebox" id="roleText"></p>
+        <div class="stack" id="scores"></div>
+      </div>
+    </div>
+
+    <div class="panel stack">
+      <h2>Field log</h2>
+      <div class="log" id="log"></div>
+    </div>
+
+    <details class="panel" id="research">
+      <summary>Research tools</summary>
+      <div class="stack">
+        <div class="stack">
+          <h3>Compare runs</h3>
+          <p class="note">Keep up to three finished or partial runs on the charts as faint lines, then start over and try a different plan.</p>
+          <div class="btns"><button class="btn small" type="button" id="pin">Keep this run on the charts</button><button class="btn small" type="button" id="clearPins">Remove kept runs</button></div>
+          <div class="status" id="pinList"></div>
+        </div>
+        <div class="stack">
+          <h3>Weather replicates</h3>
+          <p class="note">Runs your plan (past years as funded, remaining years at the current sliders) under 30 different weather patterns and shades the 10th–90th percentile range on the seagrass chart.</p>
+          <div class="btns"><button class="btn small" type="button" id="reps">Run 30 replicates</button><button class="btn small" type="button" id="clearReps">Hide range</button></div>
+          <div class="status" id="repText"></div>
+        </div>
+        <div class="stack">
+          <h3>Model parameters</h3>
+          <p class="note">Change an assumption and the current run is recomputed with the same decisions and weather, so you can test how sensitive the outcome is.</p>
+          <div class="params" id="params"></div>
+          <div class="btns"><button class="btn small" type="button" id="resetParams">Restore defaults</button></div>
+        </div>
+        <div class="stack">
+          <h3>Data</h3>
+          <div class="btns"><button class="btn small" type="button" id="copyCsv">Copy yearly data as CSV</button></div>
+          <div class="status" id="csvStatus"></div>
+          <textarea id="csvOut" readonly hidden aria-label="Yearly data as CSV"></textarea>
+        </div>
+      </div>
+    </details>
+
+    <details class="panel">
+      <summary>How the model works</summary>
+      <div class="prose">
+        <p>Each month the model follows one chain of causes, the same one students draw in the systems-thinking activity.</p>
+        <ol>
+          <li><b>Nitrogen load.</b> Runoff, septic and stormwater load grows about 1% a year with development. Legacy nitrogen in muck keeps feeding the water and fades slowly. Nutrient projects (Option A) remove nitrogen at about $600 per pound per year, starting a year after funding and phasing in over three years as groundwater flushes.</li>
+          <li><b>Algae.</b> Chlorophyll rises steeply with total nitrogen, peaks in summer, and blooms in warm months when algae are already high. Shellfish filter some of it out. Algae control (Option D) cuts it by up to 30% only while funded.</li>
+          <li><b>Light.</b> Light fades with depth as e<sup>−Kd·z</sup>, where Kd comes from water, algae and suspended sediment. Bare bottom stirs up more sediment, so losing seagrass makes the water murkier.</li>
+          <li><b>Seagrass.</b> Seagrass needs about 20% of surface light at the bottom. The model finds the deepest point where that is true and the area of lagoon bottom shallower than it. Beds beyond that area die back quickly; beds inside it spread slowly. Planted seagrass (Option B, about $50,000 per acre) survives only when light at 1 m is above the requirement.</li>
+          <li><b>Shellfish, fish and the economy.</b> Shellfish grow toward a habitat limit that reef investment (Option C) raises, and they die off when algae are heavy. Fish follow seagrass, shellfish and blooms. The local economy follows water clarity, fish and blooms.</li>
+        </ol>
+        <p>Hurricanes add a pulse of runoff and sediment and tear up some seagrass. Cold snaps knock back fish. Turn random weather off to see the average behavior.</p>
+        <h3>Where the numbers come from</h3>
+        <ul>
+          <li>Seagrass light requirement: Beck, Hagy and Le (2018), <a href="https://doi.org/10.1007/s12237-017-0287-1" target="_blank" rel="noopener">Estuaries and Coasts 41:592–610</a>, which put the Indian River Lagoon median near 18% of surface light; 20% is the commonly cited target.</li>
+          <li>Seagrass loss and slow recovery: Morris et al. (2022), <a href="https://doi.org/10.3389/fmars.2021.789818" target="_blank" rel="noopener">Frontiers in Marine Science</a>, on the 2011–2019 losses and the feedbacks that slowed recovery.</li>
+          <li>Nutrient project costs: Brevard County <a href="https://www.brevardfl.gov/SaveOurLagoon/Grants/ProjectFundingApplication" target="_blank" rel="noopener">Save Our Indian River Lagoon cost per pound of nitrogen</a> by project type.</li>
+          <li>Limits of planting: Virnstein (2021), <a href="https://www.fau.edu/hboi/documents/docs/VirnsteinCanweplantseagrassaspartofrestorationAproposalusingsmallplotsvolunteersandfeedbackloopsFloridaScientist2021.pdf" target="_blank" rel="noopener">Florida Scientist 84</a>.</li>
+          <li>Shellfish filtration in the lagoon: Galimany et al. (2017), <a href="https://doi.org/10.3354/meps12050" target="_blank" rel="noopener">Marine Ecology Progress Series 567</a>.</li>
+        </ul>
+        <p class="note">Coefficients that link nitrogen to chlorophyll and chlorophyll to light were tuned so the model reproduces the handout's 2018 and 2024 values. Treat every output as a relative comparison between plans.</p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script>
+// Lagoon restoration model — illustrative, loosely calibrated to the FISHES handout data
+// and published Indian River Lagoon (IRL) relationships. Monthly time step.
+(function (root) {
+  const DEFAULTS = {
+    startYear: 2024,
+    years: 10,
+    budget: 25,            // $M available per year
+    // Nitrogen
+    extLoad0: 400000,      // external TN load, lb/yr (2024)
+    extGrowth: 0.01,       // watershed growth, fraction/yr
+    intLoad0: 100000,      // internal/legacy load (muck, released tissue), lb/yr
+    intDecay: 0.06,        // natural decline of internal load, fraction/yr
+    releasePerAcre: 15,    // lb/yr of internal load added per acre of seagrass lost
+    tnBg: 0.45,            // background TN, mg/L
+    loadPerMgL: 417000,    // lb/yr of load per mg/L TN above background
+    tnTau: 1.5,            // years for TN to approach equilibrium (flushing + sediment exchange)
+    costPerLb: 600,        // $ per lb/yr of TN removed (blend: septic-to-sewer ~$1,550, stormwater ~$575, muck ~$600, WWTF ~$430)
+    onlineLag: 1.0,        // years from funding to first N reduction
+    rampYears: 3,          // years for groundwater to flush (benefit phases in)
+    maxCut: 0.7,           // max fraction of external load that can be removed
+    // Algae & light
+    chlK: 44.5, chlT0: 0.5, chlP: 1.314,
+    grazeK: 0.003,         // shellfish grazing on phytoplankton
+    kw: 0.25,              // light attenuation by water + dissolved color, 1/m
+    kchl: 0.03,            // per ug/L chlorophyll
+    ktss: 0.04,            // per mg/L suspended solids
+    tssBase: 4, tssBare: 6,// TSS rises as bare sediment is exposed
+    lightReq: 0.20,        // seagrass minimum light, fraction of surface irradiance
+    // Seagrass
+    habArea: 17000,        // acres of suitable bottom
+    depthScale: 1.5,       // depth distribution scale (mean depth ~1.3 m / 4.4 ft)
+    zMin: 0.2,             // too shallow (exposure, waves)
+    refAcres: 15000,       // 2018 reference acreage
+    sgGrowth: 0.5,         // vegetative expansion rate, 1/yr
+    sgLoss: 0.7,           // fraction of excess (beyond light-limited potential) lost per yr
+    recruit: 60,           // acres/yr natural recruitment when light allows
+    plantCostPerAcre: 50000,
+    plantSurvMax: 0.8,
+    plantDepth: 1.0,       // typical planting depth, m
+    // Shellfish
+    shellGrowth: 0.18, shellKbase: 100, shellKgain: 120, shellKscale: 60, // habitat capacity rises with reef investment, with diminishing returns
+    shellMort: 0.0067,     // mortality per ug/L chl above 10
+    shellPerM: 4,          // index points outplanted per $1M
+        shellNRemoval: 250,    // lb/yr TN removed per index point above 2024 level
+    // Direct algae management
+    dMaxCut: 0.3, dHalf: 8,
+    events: true,
+    seed: 1
+  };
+
+  function rng(seed) {
+    let s = seed >>> 0 || 1;
+    return function () {
+      s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0;
+      return s / 4294967296;
+    };
+  }
+
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const sigmoid = x => 1 / (1 + Math.exp(-x));
+
+  function depthCdf(z, p) { return 1 - Math.exp(-Math.pow(z / p.depthScale, 2)); }
+  function chlFromTN(tn, S, p) {
+    return p.chlK * Math.pow(Math.max(0, tn - p.chlT0), p.chlP) / (1 + p.grazeK * S);
+  }
+  function kdFrom(chl, tss, p) { return p.kw + p.kchl * chl + p.ktss * tss; }
+  function potentialAcres(kd, p) {
+    const zc = Math.log(1 / p.lightReq) / kd;
+    return p.habArea * Math.max(0, depthCdf(zc, p) - depthCdf(p.zMin, p));
+  }
+
+  function initialState(p) {
+    return {
+      t: 0, TN: 1.60, SG: 3950, S: 43, F: 45, E: 45,
+      intLoad: p.intLoad0, shellK: p.shellKbase, cumC: 0,
+      projects: [], hurricaneMonths: 0, tssPulse: 0,
+      cum: { A: 0, B: 0, C: 0, D: 0 },
+      planted: 0, plantedSurvived: 0
+    };
+  }
+
+  // plan: function(yearIndex) -> {A,B,C,D} in $M/yr, or an object used every year
+  function simulate(plan, overrides) {
+    const p = Object.assign({}, DEFAULTS, overrides || {});
+    const rand = rng(p.seed * 7919 + 13);
+    const st = initialState(p);
+    const getPlan = typeof plan === 'function' ? plan : () => plan;
+    const years = [];
+    // 2024 baseline row
+    years.push(snapshotStart(st, p));
+
+    for (let y = 0; y < p.years; y++) {
+      const a = getPlan(y) || { A: 0, B: 0, C: 0, D: 0 };
+      const alloc = { A: +a.A || 0, B: +a.B || 0, C: +a.C || 0, D: +a.D || 0 };
+      ['A', 'B', 'C', 'D'].forEach(k => st.cum[k] += alloc[k]);
+      if (alloc.A > 0) st.projects.push({ t0: y, R: alloc.A * 1e6 / p.costPerLb });
+
+      // annual events
+      const ev = [];
+      let hurricaneMonth = -1, coldSnap = false;
+      if (p.events) {
+        if (rand() < 0.15) { hurricaneMonth = 8 + Math.floor(rand() * 2); ev.push('Hurricane'); }
+        if (rand() < 0.10) { coldSnap = true; ev.push('Cold snap'); }
+      }
+      let acc = { TN: 0, chl: 0, kd: 0, secchi: 0, bloomMonths: 0, light: 0, pot: 0 };
+      let plantedY = 0, survivedY = 0, lostY = 0;
+
+      for (let m = 0; m < 12; m++) {
+        const t = y + m / 12;
+        // nitrogen
+        let ext = p.extLoad0 * Math.pow(1 + p.extGrowth, t);
+        if (m === hurricaneMonth) st.hurricaneMonths = 4;
+        if (st.hurricaneMonths > 0 && m === hurricaneMonth) st.tssPulse = 6;
+        if (st.hurricaneMonths > 0) { ext *= 1.4; st.hurricaneMonths--; }
+        let cut = 0;
+        for (const pr of st.projects) cut += pr.R * clamp((t - pr.t0 - p.onlineLag) / p.rampYears, 0, 1);
+        cut = Math.min(cut, p.maxCut * ext);
+        const shellN = (st.S - 43) * p.shellNRemoval;
+        const load = Math.max(0, ext - cut - shellN + st.intLoad);
+        const tnEq = p.tnBg + load / p.loadPerMgL;
+        st.TN += (tnEq - st.TN) / (p.tnTau * 12);
+        st.intLoad *= 1 - p.intDecay / 12;
+
+        // algae
+        const season = 1 + 0.25 * Math.sin((m - 3) / 12 * 2 * Math.PI);
+        const dCut = p.dMaxCut * (1 - Math.exp(-alloc.D / p.dHalf));
+        let chl = chlFromTN(st.TN, st.S, p) * season * (1 - dCut);
+        const warm = m >= 4 && m <= 9;
+        const pBloom = warm ? clamp((chl - 15) / 40, 0, 0.6) : 0;
+        let bloom = 0;
+        if (p.events) { if (rand() < pBloom) { bloom = 1; chl *= 1.5; } }
+        else { bloom = pBloom; chl *= 1 + 0.5 * pBloom; }
+
+        // light
+        const tss = p.tssBase + p.tssBare * clamp(1 - st.SG / p.refAcres, 0, 1) + st.tssPulse;
+        st.tssPulse *= 0.5;
+        const kd = kdFrom(chl, tss, p);
+        const pot = potentialAcres(kd, p);
+
+        // seagrass
+        if (st.SG > pot) { const loss = (p.sgLoss / 12) * (st.SG - pot); st.SG -= loss; lostY += loss; }
+        else {
+          st.SG += (p.sgGrowth / 12) * st.SG * (1 - st.SG / pot) + (p.recruit / 12) * (pot / p.refAcres);
+        }
+        if (hurricaneMonth === m) { lostY += st.SG * 0.03; st.SG *= 0.97; }
+        const siPlant = Math.exp(-kd * p.plantDepth);
+        const plantAc = alloc.B * 1e6 / p.plantCostPerAcre / 12;
+        const surv = p.plantSurvMax * sigmoid((siPlant - p.lightReq) / 0.03);
+        st.SG += plantAc * surv; plantedY += plantAc; survivedY += plantAc * surv;
+        st.SG = Math.max(0, st.SG);
+
+        // shellfish
+        st.cumC += alloc.C / 12;
+        st.shellK = p.shellKbase + p.shellKgain * (1 - Math.exp(-st.cumC / p.shellKscale));
+        const mort = p.shellMort * Math.max(0, chl - 10);
+        const outplant = p.shellPerM * alloc.C / 12 * clamp(1 - st.S / st.shellK, 0, 1) * clamp(1 - mort, 0.2, 1);
+        st.S += (p.shellGrowth * st.S * (1 - st.S / st.shellK) - mort * st.S) / 12 + outplant;
+        st.S = Math.max(1, st.S);
+
+        // fish & economy
+        const fTarget = 100 * (0.55 * st.SG / p.refAcres + 0.3 * st.S / 100 + 0.15 * (1 - bloom));
+        st.F += (fTarget - st.F) / 18;
+        if (coldSnap && m === 0) st.F *= 0.9;
+        const secchi = 1.7 / kd;
+        const eTarget = 100 * (0.35 * Math.min(1.2, secchi / 2.4) + 0.35 * st.F / 100 + 0.3 * (1 - bloom));
+        st.E += (eTarget - st.E) / 12;
+
+        acc.TN += st.TN; acc.chl += chl; acc.kd += kd; acc.secchi += secchi;
+        acc.bloomMonths += bloom; acc.light += Math.exp(-kd * 1.0); acc.pot += pot;
+      }
+      st.intLoad += p.releasePerAcre * lostY;
+      st.planted += plantedY; st.plantedSurvived += survivedY;
+      let cutNow = 0;
+      for (const pr of st.projects) cutNow += pr.R * clamp((y + 1 - pr.t0 - p.onlineLag) / p.rampYears, 0, 1);
+      years.push({
+        year: p.startYear + y + 1,
+        alloc,
+        TN: acc.TN / 12, chl: acc.chl / 12, kd: acc.kd / 12, secchi: acc.secchi / 12,
+        lightAt1m: acc.light / 12, potential: acc.pot / 12,
+        seagrass: st.SG, shellfish: st.S, fish: st.F, economy: st.E,
+        bloomMonths: acc.bloomMonths, events: ev,
+        nCut: cutNow, planted: plantedY, plantedSurvived: survivedY,
+        spent: alloc.A + alloc.B + alloc.C + alloc.D,
+        cum: Object.assign({}, st.cum)
+      });
+    }
+    return { params: p, years, scores: scoreRun(years, p) };
+  }
+
+  function snapshotStart(st, p) {
+    const chl = chlFromTN(st.TN, st.S, p);
+    const tss = p.tssBase + p.tssBare * clamp(1 - st.SG / p.refAcres, 0, 1);
+    const kd = kdFrom(chl, tss, p);
+    return {
+      year: p.startYear, alloc: { A: 0, B: 0, C: 0, D: 0 },
+      TN: st.TN, chl, kd, secchi: 1.7 / kd, lightAt1m: Math.exp(-kd), potential: potentialAcres(kd, p),
+      seagrass: st.SG, shellfish: st.S, fish: st.F, economy: st.E, bloomMonths: 4, events: [],
+      nCut: 0, planted: 0, plantedSurvived: 0, spent: 0, cum: { A: 0, B: 0, C: 0, D: 0 }
+    };
+  }
+
+  function scoreRun(years, p) {
+    const last = years[years.length - 1];
+    const y0 = years[0];
+    const n = years.length - 1;
+    if (n < 1) return null;
+    const lastK = years.slice(Math.max(1, years.length - 3));
+    const bloomFree = 1 - lastK.reduce((s, r) => s + r.bloomMonths, 0) / (6 * lastK.length);
+    const sg = clamp(last.seagrass / p.refAcres, 0, 1.2);
+    const clar = clamp(last.secchi / 2.4, 0, 1.2);
+    const sh = clamp(last.shellfish / 100, 0, 1.2);
+    const fi = clamp(last.fish / 100, 0, 1.2);
+    const ec = clamp(last.economy / 100, 0, 1.2);
+    const totalSpent = ['A', 'B', 'C', 'D'].reduce((s, k) => s + last.cum[k], 0);
+    const gained = last.seagrass - y0.seagrass;
+    const perDollar = totalSpent > 0 ? clamp(gained / totalSpent / 25, 0, 1) : 0; // 25 acres gained per $1M = full marks
+    const early = years[Math.min(4, n)];
+    const earlyGain = clamp(((early.secchi - y0.secchi) / y0.secchi + (early.seagrass - y0.seagrass) / y0.seagrass) / 1.0, 0, 1);
+    const pct = x => Math.round(100 * clamp(x, 0, 1));
+    return {
+      'Environmental Scientist': pct(0.5 * sg + 0.25 * clar + 0.25 * sh),
+      'Government Official': pct(0.4 * perDollar + 0.3 * earlyGain + 0.3 * bloomFree),
+      'Commercial Fisher': pct(0.6 * fi + 0.4 * sh),
+      'Tourism Representative': pct(0.5 * ec + 0.3 * clar + 0.2 * bloomFree),
+      'Community Resident': pct(0.5 * bloomFree + 0.25 * clar + 0.25 * fi)
+    };
+  }
+
+  const api = { DEFAULTS, simulate, potentialAcres, depthCdf, chlFromTN, kdFrom };
+  if (typeof module !== 'undefined') module.exports = api; else root.LagoonModel = api;
+})(this);
+
+</script>
+<script>
+(function () {
+  const M = window.LagoonModel;
+  const HIST = { years: [2018, 2020, 2022, 2024], TN: [0.85, 1.15, 1.42, 1.60], secchi: [2.4, 1.8, 1.2, 0.9], seagrass: [15000, 11300, 7100, 3950], shellfish: [100, 82, 61, 43] };
+  const OPTS = [
+    { k: 'A', name: 'Reduce nutrient pollution', color: 'var(--algae)', note: 'Septic-to-sewer, stormwater, muck removal. About $600 per pound of nitrogen removed each year. Benefits start after a year and build for three more.' },
+    { k: 'B', name: 'Plant seagrass', color: 'var(--grass)', note: 'About $50,000 per acre. Plants survive only when enough light reaches the bottom.' },
+    { k: 'C', name: 'Restore shellfish', color: 'var(--shell)', note: 'Clam and oyster outplanting plus reef habitat. Shellfish filter water but die back when algae are heavy.' },
+    { k: 'D', name: 'Manage algal blooms', color: 'var(--water)', note: 'Aeration, removal, biological control. Cuts algae up to 30% the year it is funded, with no lasting effect.' }
+  ];
+  const ROLES = {
+    'Environmental Scientist': 'You care about long-term recovery: seagrass acreage (50%), water clarity (25%) and shellfish (25%) at the end of the run.',
+    'Government Official': 'You answer to voters and taxpayers: seagrass gained per dollar (40%), visible improvement within four years (30%) and fewer blooms in the last three years (30%).',
+    'Commercial Fisher': 'Your living depends on the catch: fish stocks (60%) and shellfish (40%).',
+    'Tourism Representative': 'Visitors come for clear water: the local economy (50%), water clarity (30%) and bloom-free summers (20%).',
+    'Community Resident': 'You live on the water: no blooms or smell (50%), clear water (25%) and good fishing (25%).'
+  };
+  const PARAMS = [
+    { k: 'budget', label: 'Budget per year ($M)', min: 5, max: 60, step: 1, help: 'Total available each year.' },
+    { k: 'lightReq', label: 'Seagrass light requirement (% of surface)', min: 10, max: 35, step: 1, scale: 100, help: 'Published Indian River Lagoon estimates range from about 9% to 33%.' },
+    { k: 'sgGrowth', label: 'Seagrass spread rate (per year)', min: 0.1, max: 1.0, step: 0.05, help: 'How fast beds expand into bottom with enough light.' },
+    { k: 'costPerLb', label: 'Cost per lb of nitrogen removed ($/yr)', min: 200, max: 1600, step: 50, help: 'Septic-to-sewer averages about $1,550; vegetation harvest about $115.' },
+    { k: 'rampYears', label: 'Groundwater flushing time (years)', min: 0.5, max: 8, step: 0.5, help: 'How long nutrient projects take to reach full effect.' },
+    { k: 'plantCostPerAcre', label: 'Seagrass planting cost ($ per acre)', min: 10000, max: 150000, step: 5000, help: 'Pilot projects have run roughly $50,000–$110,000 per acre.' },
+    { k: 'extGrowth', label: 'Watershed load growth (% per year)', min: 0, max: 4, step: 0.5, scale: 100, help: 'New development adds runoff each year.' }
+  ];
+
+  const state = {
+    plans: [], cur: 0, horizon: 10, events: true, seed: 1,
+    params: {}, alloc: { A: 10, B: 2, C: 8, D: 5 },
+    role: 'Environmental Scientist', pins: [], band: null, run: null
+  };
+  const $ = id => document.getElementById(id);
+  const fmt = (x, d) => Number(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const P = () => Object.assign({}, M.DEFAULTS, state.params);
+  const budget = () => P().budget;
+  const allocSum = a => a.A + a.B + a.C + a.D;
+  const allocLabel = a => `A ${a.A} · B ${a.B} · C ${a.C} · D ${a.D}`;
+
+  function store(key, val) { try { localStorage.setItem('lagoon.' + key, JSON.stringify(val)); } catch (e) {} }
+  function load(key) { try { const v = localStorage.getItem('lagoon.' + key); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
+
+  /* ---------- options UI ---------- */
+  function buildOptions() {
+    $('options').innerHTML = OPTS.map(o => `
+      <div class="opt">
+        <div class="opt-head"><label for="alloc${o.k}"><span class="tag" style="background:${o.color}">${o.k}</span>${o.name}</label><span class="opt-val" id="val${o.k}"></span></div>
+        <input type="range" id="alloc${o.k}" min="0" max="${budget()}" step="0.5" value="${state.alloc[o.k]}">
+        <p>${o.note}</p>
+      </div>`).join('');
+    OPTS.forEach(o => $('alloc' + o.k).addEventListener('input', e => setAlloc(o.k, +e.target.value)));
+    syncAllocUI();
+  }
+  function setAlloc(k, v) {
+    const others = allocSum(state.alloc) - state.alloc[k];
+    state.alloc[k] = Math.max(0, Math.min(v, budget() - others));
+    syncAllocUI();
+  }
+  function syncAllocUI() {
+    const b = budget();
+    OPTS.forEach(o => {
+      const el = $('alloc' + o.k);
+      el.max = b; el.value = state.alloc[o.k];
+      $('val' + o.k).textContent = '$' + fmt(state.alloc[o.k], state.alloc[o.k] % 1 ? 1 : 0) + 'M';
+    });
+    const s = allocSum(state.alloc);
+    $('budgetText').textContent = `$${fmt(s, s % 1 ? 1 : 0)}M of $${b}M`;
+    $('budgetBar').innerHTML = OPTS.map(o => `<div style="width:${100 * state.alloc[o.k] / b}%;background:${o.color}"></div>`).join('');
+  }
+  function preset(kind) {
+    const b = budget();
+    if (kind === 'zero') state.alloc = { A: 0, B: 0, C: 0, D: 0 };
+    else if (kind === 'even') state.alloc = { A: b / 4, B: b / 4, C: b / 4, D: b / 4 };
+    else { state.alloc = { A: 0, B: 0, C: 0, D: 0 }; state.alloc[kind] = b; }
+    syncAllocUI();
+  }
+
+  /* ---------- simulation ---------- */
+  function simParams(extra) { return Object.assign(P(), { events: state.events, seed: state.seed }, extra || {}); }
+  function recompute() {
+    state.run = M.simulate(y => state.plans[y], simParams({ years: state.cur }));
+    renderAll();
+  }
+  function fundYear() {
+    if (state.cur >= state.horizon) return;
+    state.plans[state.cur] = Object.assign({}, state.alloc);
+    state.cur++; state.band = null;
+    recompute();
+  }
+  function runToEnd() {
+    while (state.cur < state.horizon) { state.plans[state.cur] = Object.assign({}, state.alloc); state.cur++; }
+    state.band = null; recompute();
+  }
+  function resetRun() { state.plans = []; state.cur = 0; state.band = null; recompute(); }
+
+  /* ---------- stats ---------- */
+  function grade(v, good, warn, higherIsBetter) {
+    if (higherIsBetter) return v >= good ? 'good' : v >= warn ? 'warn' : 'bad';
+    return v <= good ? 'good' : v <= warn ? 'warn' : 'bad';
+  }
+  function renderStats() {
+    const Y = state.run.years, r = Y[Y.length - 1], r0 = Y[0];
+    const delta = (a, b, d, unit) => { const x = a - b; if (Y.length < 2) return 'starting value'; return (x >= 0 ? '+' : '−') + fmt(Math.abs(x), d) + (unit || '') + ' since 2024'; };
+    const items = [
+      ['Total nitrogen', fmt(r.TN, 2) + ' mg/L', grade(r.TN, 1.0, 1.4, false), delta(r.TN, r0.TN, 2)],
+      ['Water clarity', fmt(r.secchi, 2) + ' m', grade(r.secchi, 1.6, 1.1, true), delta(r.secchi, r0.secchi, 2, ' m')],
+      ['Light at 1 m', fmt(100 * r.lightAt1m, 0) + '%', grade(r.lightAt1m, 0.25, P().lightReq, true), 'seagrass needs ' + fmt(100 * P().lightReq, 0) + '%'],
+      ['Seagrass', fmt(r.seagrass, 0) + ' ac', grade(r.seagrass, 10000, 6000, true), delta(r.seagrass, r0.seagrass, 0, ' ac')],
+      ['Shellfish', fmt(r.shellfish, 0), grade(r.shellfish, 80, 50, true), delta(r.shellfish, r0.shellfish, 0)],
+      ['Fish', fmt(r.fish, 0), grade(r.fish, 80, 50, true), delta(r.fish, r0.fish, 0)],
+      ['Local economy', fmt(r.economy, 0), grade(r.economy, 80, 55, true), delta(r.economy, r0.economy, 0)],
+      ['Bloom months', fmt(r.bloomMonths, r.bloomMonths % 1 ? 1 : 0), grade(r.bloomMonths, 1, 3, false), 'during ' + r.year]
+    ];
+    $('stats').innerHTML = items.map(([l, v, g, d]) => `<div class="stat ${g}"><span class="label">${l}</span><span class="v">${v}</span><span class="d">${d}</span></div>`).join('');
+  }
+
+  /* ---------- map ---------- */
+  const GW = 240, GH = 96;
+  function hash(x, y, s) {
+    let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function vnoise(x, y, s) {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash(xi, yi, s), b = hash(xi + 1, yi, s), c = hash(xi, yi + 1, s), d = hash(xi + 1, yi + 1, s);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  const fbm = (x, y, s) => 0.55 * vnoise(x, y, s) + 0.3 * vnoise(x * 2.1, y * 2.1, s + 7) + 0.15 * vnoise(x * 4.3, y * 4.3, s + 13);
+
+  const MAP = (function build() {
+    const type = new Uint8Array(GW * GH); // 0 mainland, 1 lagoon, 2 ocean, 3 barrier, 4 island
+    const islands = [[0.2, 0.42, 0.022, 0.07], [0.46, 0.56, 0.014, 0.045], [0.79, 0.38, 0.018, 0.06], [0.88, 0.6, 0.01, 0.04]];
+    for (let i = 0; i < GW; i++) {
+      const x = i / GW;
+      const top = 0.12 + 0.05 * Math.sin(x * 9 + 0.5) + 0.08 * (fbm(x * 6, 0.3, 3) - 0.5);
+      const bot = 0.74 + 0.04 * Math.sin(x * 6.5) + 0.06 * (fbm(x * 5, 2.7, 5) - 0.5);
+      const bar = bot + 0.085 + 0.02 * Math.sin(x * 11);
+      const inlet = x > 0.63 && x < 0.652;
+      for (let j = 0; j < GH; j++) {
+        const y = j / GH; let t;
+        if (y < top) t = 0; else if (y < bot) t = 1; else if (y < bar) t = inlet ? 2 : 3; else t = 2;
+        if (t === 1) for (const [cx, cy, rx, ry] of islands) { const dx = (x - cx) / rx, dy = (y - cy) / ry; if (dx * dx + dy * dy < 1 + 0.3 * (fbm(i * 0.3, j * 0.3, 9) - 0.5)) t = 4; }
+        type[j * GW + i] = t;
+      }
+    }
+    // distance to shore for lagoon cells
+    const dist = new Float32Array(GW * GH).fill(-1); const q = [];
+    for (let k = 0; k < GW * GH; k++) if (type[k] !== 1) { dist[k] = 0; q.push(k); }
+    for (let h = 0; h < q.length; h++) {
+      const k = q[h], i = k % GW, j = (k / GW) | 0;
+      for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ni = i + di, nj = j + dj; if (ni < 0 || nj < 0 || ni >= GW || nj >= GH) continue;
+        const nk = nj * GW + ni; if (dist[nk] < 0) { dist[nk] = dist[k] + 1; q.push(nk); }
+      }
+    }
+    const lag = []; let dmax = 1;
+    for (let k = 0; k < GW * GH; k++) if (type[k] === 1) { lag.push(k); dmax = Math.max(dmax, dist[k]); }
+    const depth = new Float32Array(GW * GH), u = new Float32Array(GW * GH);
+    const rank = lag.map(k => { const i = k % GW, j = (k / GW) | 0; return [k, Math.pow(dist[k] / dmax, 0.7) + 0.35 * (fbm(i * 0.09, j * 0.09, 21) - 0.5)]; }).sort((a, b) => a[1] - b[1]);
+    const ds = M.DEFAULTS.depthScale;
+    rank.forEach(([k], n) => { const qq = (n + 0.5) / rank.length; depth[k] = ds * Math.sqrt(-Math.log(1 - qq * 0.995)); });
+    const ur = lag.map(k => { const i = k % GW, j = (k / GW) | 0; return [k, fbm(i * 0.11, j * 0.11, 33) + 0.25 * hash(i, j, 41)]; }).sort((a, b) => a[1] - b[1]);
+    ur.forEach(([k], n) => { u[k] = (n + 0.5) / ur.length; });
+    // reef candidate cells: shallow, ranked by hash
+    const reefs = lag.filter(k => depth[k] > 0.25 && depth[k] < 0.9).map(k => [k, hash(k % GW, (k / GW) | 0, 77)]).sort((a, b) => a[1] - b[1]).map(([k]) => k);
+    // keep reefs spread out
+    const picked = [];
+    for (const k of reefs) { const i = k % GW, j = (k / GW) | 0; if (picked.every(p => Math.abs(p[0] - i) + Math.abs(p[1] - j) > 9)) picked.push([i, j]); if (picked.length >= 30) break; }
+    return { type, depth, u, reefs: picked, shoreNoise: Array.from({ length: GW * GH }, (_, k) => hash(k % GW, (k / GW) | 0, 5)) };
+  })();
+
+  function hexToRgb(h) { h = h.trim().replace('#', ''); if (h.length === 3) h = h.split('').map(c => c + c).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const shade = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
+  function tok(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  const raster = document.createElement('canvas'); raster.width = GW; raster.height = GH;
+  function renderMap() {
+    const Y = state.run.years, r = Y[Y.length - 1], p = P();
+    const C = { land: hexToRgb(tok('--map-land')), sand: hexToRgb(tok('--map-sand')), ocean: hexToRgb(tok('--map-ocean')), clear: hexToRgb(tok('--map-clear')), murky: hexToRgb(tok('--map-murky')), grass: hexToRgb(tok('--map-grass')), bloom: hexToRgb(tok('--map-bloom')) };
+    const zc = Math.log(1 / p.lightReq) / r.kd;
+    const pot = M.potentialAcres(r.kd, p);
+    const frac = pot > 0 ? Math.min(1, r.seagrass / pot) : 0;
+    const turb = Math.max(0, Math.min(1, (r.chl - 4) / 40));
+    const bloomAmt = Math.min(1, r.bloomMonths / 5);
+    const water = mix(C.clear, C.murky, turb);
+    const ctx = raster.getContext('2d'); const img = ctx.createImageData(GW, GH); const d = img.data;
+    const T = MAP.type;
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+      const k = j * GW + i, t = T[k], n = MAP.shoreNoise[k];
+      let c;
+      if (t === 1) {
+        const z = MAP.depth[k];
+        c = shade(water, 1.08 - 0.42 * Math.min(1, z / 2.8));
+        if (z > p.zMin && z < zc && MAP.u[k] < frac) c = shade(mix(C.grass, c, 0.08 + 0.22 * turb), 1.02 - 0.18 * Math.min(1, z / 2.5));
+        if (r.bloomMonths >= 1 && fbm(i * 0.07 + r.year, j * 0.12, 55) > 0.62 - 0.12 * bloomAmt) c = mix(c, C.bloom, 0.25 + 0.3 * bloomAmt);
+      } else if (t === 2) c = shade(C.ocean, 0.95 + 0.08 * n);
+      else {
+        const nearWater = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => { const ii = i + a, jj = j + b; return ii >= 0 && jj >= 0 && ii < GW && jj < GH && (T[jj * GW + ii] === 1 || T[jj * GW + ii] === 2); });
+        c = (t === 3 || nearWater) ? shade(C.sand, 0.95 + 0.08 * n) : shade(C.land, 0.9 + 0.15 * fbm(i * 0.2, j * 0.2, 2));
+      }
+      d[k * 4] = c[0]; d[k * 4 + 1] = c[1]; d[k * 4 + 2] = c[2]; d[k * 4 + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    const cv = $('map'); const box = cv.parentElement; const dpr = window.devicePixelRatio || 1;
+    const W = box.clientWidth, H = box.clientHeight; if (!W || !H) return;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.imageSmoothingEnabled = false; g.drawImage(raster, 0, 0, W, H);
+    // reefs
+    const nReef = Math.max(0, Math.min(MAP.reefs.length, Math.round(r.shellfish / 7)));
+    const sx = W / GW, sy = H / GH, rad = Math.max(2.5, W / 260);
+    g.fillStyle = tok('--shell'); g.strokeStyle = tok('--surface'); g.lineWidth = 1;
+    for (let n = 0; n < nReef; n++) { const [i, j] = MAP.reefs[n]; g.beginPath(); g.arc((i + 0.5) * sx, (j + 0.5) * sy, rad, 0, Math.PI * 2); g.fill(); g.stroke(); }
+    // labels
+    const fs = Math.max(9, Math.min(12, W / 70));
+    g.font = `600 ${fs}px "Public Sans", system-ui, sans-serif`; g.textBaseline = 'middle';
+    const label = (txt, x, y) => { g.lineWidth = 3; g.strokeStyle = 'rgba(0,0,0,0.35)'; g.strokeText(txt, x, y); g.fillStyle = '#ffffff'; g.fillText(txt, x, y); };
+    label('MAINLAND', W * 0.03, H * 0.06);
+    label('BARRIER ISLAND', W * 0.08, H * 0.82);
+    label('ATLANTIC OCEAN', W * 0.03, H * 0.95);
+    label('INLET', W * 0.665, H * 0.93);
+    $('mapTitle').textContent = `The lagoon in ${r.year}`;
+    $('mapNote').textContent = `Light reaches ${fmt(100 * p.lightReq, 0)}% of surface down to ${fmt(zc, 2)} m`;
+  }
+
+  /* ---------- charts ---------- */
+  function niceStep(range, n) { const raw = range / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; }
+  function drawChart(id, cfg) {
+    const el = $(id); const W = Math.max(240, el.clientWidth), H = 190;
+    const m = { l: 46, r: 14, t: 10, b: 24 };
+    const x0 = 2018, x1 = 2024 + state.horizon;
+    const all = [];
+    cfg.series.forEach(s => s.pts.forEach(p => all.push(p[1])));
+    (cfg.ghosts || []).forEach(s => s.pts.forEach(p => all.push(p[1])));
+    if (cfg.band) cfg.band.hi.forEach(p => all.push(p[1]));
+    let hi = Math.max(...all, cfg.minTop || 0); let lo = cfg.yMin != null ? cfg.yMin : Math.min(...all);
+    const step = niceStep(hi - lo || 1, 4); hi = Math.ceil(hi / step) * step; lo = Math.floor(lo / step) * step;
+    const X = x => m.l + (x - x0) / (x1 - x0) * (W - m.l - m.r);
+    const Yp = y => H - m.b - (y - lo) / (hi - lo) * (H - m.t - m.b);
+    const dec = step < 0.1 ? 2 : step < 1 ? 1 : 0;
+    let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${cfg.aria}">`;
+    for (let v = lo; v <= hi + step / 2; v += step) {
+      s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Yp(v)}" y2="${Yp(v)}" style="stroke:var(--line)" stroke-width="1"/>`;
+      s += `<text x="${m.l - 6}" y="${Yp(v)}" text-anchor="end" dominant-baseline="middle" style="fill:var(--muted);font:11px var(--font-data)">${fmt(v, dec)}</text>`;
+    }
+    const pxPerYr = (W - m.l - m.r) / (x1 - x0); const xstep = [1, 2, 3, 4, 5].find(st => pxPerYr * st >= 44) || 5;
+    for (let yr = x0; yr <= x1; yr += xstep) s += `<text x="${X(yr)}" y="${H - 6}" text-anchor="middle" style="fill:var(--muted);font:11px var(--font-data)">${yr}</text>`;
+    s += `<line x1="${X(2024)}" x2="${X(2024)}" y1="${m.t}" y2="${H - m.b}" style="stroke:var(--muted)" stroke-dasharray="2 3" stroke-width="1"/>`;
+    if (cfg.ref != null) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Yp(cfg.ref)}" y2="${Yp(cfg.ref)}" style="stroke:var(--muted)" stroke-dasharray="6 4" stroke-width="1" opacity="0.7"/>`;
+    if (cfg.band) {
+      const top = cfg.band.hi.map(p => `${X(p[0])},${Yp(p[1])}`), bot = cfg.band.lo.slice().reverse().map(p => `${X(p[0])},${Yp(p[1])}`);
+      s += `<polygon points="${top.concat(bot).join(' ')}" style="fill:${cfg.band.color}" opacity="0.18"/>`;
+    }
+    (cfg.ghosts || []).forEach(g => { if (g.pts.length > 1) s += `<polyline points="${g.pts.map(p => `${X(p[0])},${Yp(p[1])}`).join(' ')}" fill="none" style="stroke:${g.color}" stroke-width="1.5" opacity="0.35"/>`; });
+    cfg.series.forEach(se => {
+      if (se.pts.length > 1) s += `<polyline points="${se.pts.map(p => `${X(p[0])},${Yp(p[1])}`).join(' ')}" fill="none" style="stroke:${se.color}" stroke-width="${se.dash ? 1.5 : 2.25}" ${se.dash ? 'stroke-dasharray="5 4"' : ''} stroke-linejoin="round"/>`;
+      if (se.dots) se.pts.forEach(p => { s += `<circle cx="${X(p[0])}" cy="${Yp(p[1])}" r="3.2" style="fill:var(--surface);stroke:${se.color}" stroke-width="1.75"/>`; });
+      if (se.end && se.pts.length) { const p = se.pts[se.pts.length - 1]; s += `<circle cx="${X(p[0])}" cy="${Yp(p[1])}" r="4" style="fill:${se.color}"/>`; }
+    });
+    s += '</svg>';
+    el.innerHTML = s;
+  }
+  function legend(id, items) { $(id).innerHTML = items.map(([n, c, dash]) => `<span><i class="${dash ? 'dash' : ''}" style="border-color:${c}"></i>${n}</span>`).join(''); }
+  const series = (key, scale) => state.run.years.map(r => [r.year, r[key] * (scale || 1)]);
+  const histPts = key => HIST.years.map((y, i) => [y, HIST[key][i]]);
+  const pinColors = ['var(--muted)', 'var(--fish)', 'var(--shell)'];
+  function ghosts(key) { return state.pins.map((p, i) => ({ pts: p.years.map(r => [r.year, r[key]]), color: pinColors[i] })); }
+  function renderCharts() {
+    const pinLeg = state.pins.map((p, i) => [`Kept run ${i + 1}`, pinColors[i]]);
+    drawChart('chTN', { aria: 'Total nitrogen over time', yMin: 0.6, series: [{ pts: histPts('TN'), color: 'var(--algae)', dots: true }, { pts: series('TN'), color: 'var(--algae)', end: true }], ghosts: ghosts('TN') });
+    legend('lgTN', [['Handout data', 'var(--algae)', true], ['Simulated', 'var(--algae)']].concat(pinLeg));
+    drawChart('chSec', { aria: 'Water clarity over time', yMin: 0, minTop: 2.5, series: [{ pts: histPts('secchi'), color: 'var(--water)', dots: true }, { pts: series('secchi'), color: 'var(--water)', end: true }], ghosts: ghosts('secchi') });
+    legend('lgSec', [['Handout data', 'var(--water)', true], ['Simulated', 'var(--water)']].concat(pinLeg));
+    drawChart('chSG', { aria: 'Seagrass acreage over time', yMin: 0, minTop: 16000, ref: 15000,
+      series: [{ pts: series('potential'), color: 'var(--grass)', dash: true }, { pts: histPts('seagrass'), color: 'var(--grass)', dots: true }, { pts: series('seagrass'), color: 'var(--grass)', end: true }],
+      ghosts: ghosts('seagrass'), band: state.band ? { lo: state.band.lo, hi: state.band.hi, color: 'var(--grass)' } : null });
+    legend('lgSG', [['Seagrass', 'var(--grass)'], ['Area with enough light', 'var(--grass)', true], ['2018 level', 'var(--muted)', true]].concat(state.band ? [['10th–90th percentile', 'var(--grass)']] : []).concat(pinLeg));
+    drawChart('chBio', { aria: 'Shellfish and fish indices over time', yMin: 0, minTop: 110, ref: 100,
+      series: [{ pts: histPts('shellfish'), color: 'var(--shell)', dots: true }, { pts: series('shellfish'), color: 'var(--shell)', end: true }, { pts: series('fish'), color: 'var(--fish)', end: true }], ghosts: ghosts('shellfish') });
+    legend('lgBio', [['Shellfish', 'var(--shell)'], ['Fish', 'var(--fish)']].concat(pinLeg));
+  }
+
+  /* ---------- predictions ---------- */
+  function predRows() { const h = state.horizon; const yrs = [1, 5, 10]; if (h > 10) yrs.push(h); return yrs; }
+  function buildPred() {
+    const saved = load('pred') || {};
+    $('predBody').innerHTML = predRows().map(n => `<tr><th scope="row">After ${n} year${n > 1 ? 's' : ''} <span class="mono">(${2024 + n})</span></th>
+      <td><input type="number" id="pSG${n}" min="0" step="100" placeholder="acres" value="${saved['SG' + n] ?? ''}" aria-label="Predicted seagrass after ${n} years"><div class="mono note" id="aSG${n}"></div></td>
+      <td><input type="number" id="pSec${n}" min="0" step="0.1" placeholder="m" value="${saved['Sec' + n] ?? ''}" aria-label="Predicted clarity after ${n} years"><div class="mono note" id="aSec${n}"></div></td></tr>`).join('');
+    predRows().forEach(n => ['SG', 'Sec'].forEach(k => $('p' + k + n).addEventListener('input', () => { const s = load('pred') || {}; s[k + n] = $('p' + k + n).value; store('pred', s); renderPred(); })));
+    renderPred();
+  }
+  function renderPred() {
+    const Y = state.run.years;
+    predRows().forEach(n => {
+      const r = Y[n];
+      [['SG', 'seagrass', 0, ' ac'], ['Sec', 'secchi', 2, ' m']].forEach(([k, key, d, u]) => {
+        const out = $('a' + k + n); if (!out) return;
+        if (!r) { out.textContent = ''; return; }
+        const guess = parseFloat($('p' + k + n).value);
+        let txt = 'Actual ' + fmt(r[key], d) + u;
+        if (!isNaN(guess)) { const err = (guess - r[key]) / r[key] * 100; txt += ` · you were ${fmt(Math.abs(err), 0)}% ${err >= 0 ? 'high' : 'low'}`; }
+        out.textContent = txt;
+      });
+    });
+  }
+
+  /* ---------- scores ---------- */
+  function renderScores() {
+    $('roleText').textContent = ROLES[state.role];
+    const sc = state.run.scores;
+    if (!sc) { $('scores').innerHTML = '<p class="note">Scores appear after the first funded year.</p>'; return; }
+    const n = state.run.years.length - 1;
+    $('scores').innerHTML = `<p class="note">After ${n} year${n > 1 ? 's' : ''}${n < state.horizon ? ' (run still in progress)' : ''}</p>` +
+      Object.entries(sc).map(([name, v]) => `<div class="score ${name === state.role ? 'me' : ''}"><span class="name">${name}</span><span class="num">${v}</span><div class="track"><div style="width:${v}%"></div></div></div>`).join('');
+  }
+
+  /* ---------- log ---------- */
+  function renderLog() {
+    const Y = state.run.years;
+    if (Y.length < 2) { $('log').innerHTML = '<p class="note">Fund a year to start the log. Each entry records what you spent and what happened.</p>'; return; }
+    const items = [];
+    for (let i = Y.length - 1; i >= 1; i--) {
+      const r = Y[i], prev = Y[i - 1];
+      const pills = [];
+      r.events.forEach(e => pills.push(`<span class="pill bad">${e}</span>`));
+      if (r.bloomMonths >= 3) pills.push(`<span class="pill bad">${fmt(r.bloomMonths, r.bloomMonths % 1 ? 1 : 0)} bloom months</span>`);
+      else if (r.bloomMonths >= 1) pills.push(`<span class="pill warn">${fmt(r.bloomMonths, r.bloomMonths % 1 ? 1 : 0)} bloom month${r.bloomMonths >= 1.5 ? 's' : ''}</span>`);
+      else pills.push('<span class="pill good">No major blooms</span>');
+      const notes = [];
+      notes.push(`Spent $${fmt(r.spent, 1)}M (${allocLabel(r.alloc)}).`);
+      if (r.nCut > 0) notes.push(`Projects now keep ${fmt(r.nCut, 0)} lb of nitrogen a year out of the lagoon.`);
+      if (r.planted > 0) notes.push(`Planted ${fmt(r.planted, 0)} acres of seagrass; ${fmt(r.plantedSurvived, 0)} survived${r.plantedSurvived / r.planted < 0.3 ? ' because too little light reached the bottom' : ''}.`);
+      const dsg = r.seagrass - prev.seagrass;
+      notes.push(`Seagrass ${dsg >= 0 ? 'gained' : 'lost'} ${fmt(Math.abs(dsg), 0)} acres; clarity ${fmt(r.secchi, 2)} m.`);
+      items.push(`<div class="log-item"><span class="y">${r.year}</span><div>${pills.join('')}<p>${notes.join(' ')}</p></div></div>`);
+    }
+    $('log').innerHTML = items.join('');
+  }
+
+  /* ---------- controls state ---------- */
+  function renderControls() {
+    const done = state.cur >= state.horizon;
+    $('nextYear').textContent = done ? 'Done' : String(2025 + state.cur);
+    $('decisionLabel').textContent = done ? `Run complete through ${2024 + state.horizon}` : 'Next decision';
+    $('runYear').textContent = done ? 'Run complete' : `Fund ${2025 + state.cur}`;
+    $('runYear').disabled = done; $('runAll').disabled = done;
+    $('ticks').innerHTML = Array.from({ length: state.horizon }, (_, i) => `<span class="${i < state.cur ? 'done' : ''}"></span>`).join('');
+    $('seedText').textContent = '#' + state.seed;
+    $('runStatus').textContent = state.cur === 0 ? 'Set the sliders, then fund the first year. You can change the mix every year.' : done ? 'Start over or keep this run for comparison under Research tools.' : `${state.horizon - state.cur} year${state.horizon - state.cur > 1 ? 's' : ''} left. The sliders set next year's spending.`;
+    $('pinList').textContent = state.pins.length ? state.pins.map((p, i) => `Kept run ${i + 1}: ${p.label}`).join(' | ') : '';
+  }
+
+  function renderAll() { renderControls(); renderStats(); renderMap(); renderCharts(); renderPred(); renderScores(); renderLog(); }
+
+  /* ---------- research tools ---------- */
+  function buildParams() {
+    $('params').innerHTML = PARAMS.map(p => {
+      const v = P()[p.k] * (p.scale || 1);
+      return `<label class="param" for="par_${p.k}"><span>${p.label}</span><input type="number" id="par_${p.k}" min="${p.min}" max="${p.max}" step="${p.step}" value="${+v.toFixed(3)}"><span class="help">${p.help}</span></label>`;
+    }).join('');
+    PARAMS.forEach(p => $('par_' + p.k).addEventListener('change', e => {
+      let v = parseFloat(e.target.value); if (isNaN(v)) return;
+      v = Math.max(p.min, Math.min(p.max, v)); e.target.value = v;
+      state.params[p.k] = v / (p.scale || 1);
+      if (p.k === 'budget') { const b = budget(); OPTS.forEach(o => { state.alloc[o.k] = Math.min(state.alloc[o.k], b); }); while (allocSum(state.alloc) > b) { const k = OPTS.map(o => o.k).sort((a, c) => state.alloc[c] - state.alloc[a])[0]; state.alloc[k] = Math.max(0, state.alloc[k] - (allocSum(state.alloc) - b)); } syncAllocUI(); }
+      state.band = null; recompute();
+    }));
+  }
+  function runReplicates() {
+    if (!state.events) { $('repText').textContent = 'Turn on random weather and blooms first; without it every replicate is identical.'; return; }
+    const n = 30, plan = y => (y < state.cur ? state.plans[y] : state.alloc);
+    const runs = []; for (let s = 1; s <= n; s++) runs.push(M.simulate(plan, simParams({ seed: 1000 + s, years: state.horizon })).years);
+    const lo = [], hi = [], med = [];
+    for (let i = 0; i <= state.horizon; i++) {
+      const v = runs.map(r => r[i].seagrass).sort((a, b) => a - b);
+      const yr = 2024 + i; lo.push([yr, v[Math.floor(n * 0.1)]]); hi.push([yr, v[Math.floor(n * 0.9) - 1]]); med.push(v[Math.floor(n / 2)]);
+    }
+    state.band = { lo, hi };
+    const last = state.horizon;
+    $('repText').textContent = `Seagrass in ${2024 + last}: median ${fmt(med[last], 0)} acres; 80% of weather patterns fall between ${fmt(lo[last][1], 0)} and ${fmt(hi[last][1], 0)}.`;
+    renderCharts();
+  }
+  function csv() {
+    const head = ['year', 'A_$M', 'B_$M', 'C_$M', 'D_$M', 'TN_mgL', 'chl_ugL', 'Kd_per_m', 'secchi_m', 'light_1m_pct', 'light_limited_acres', 'seagrass_acres', 'shellfish_index', 'fish_index', 'economy_index', 'bloom_months', 'N_removed_lb_yr', 'planted_acres', 'planted_survived', 'events'];
+    const rows = state.run.years.map(r => [r.year, r.alloc.A, r.alloc.B, r.alloc.C, r.alloc.D, r.TN.toFixed(3), r.chl.toFixed(1), r.kd.toFixed(3), r.secchi.toFixed(2), (100 * r.lightAt1m).toFixed(1), r.potential.toFixed(0), r.seagrass.toFixed(0), r.shellfish.toFixed(1), r.fish.toFixed(1), r.economy.toFixed(1), r.bloomMonths.toFixed(1), r.nCut.toFixed(0), r.planted.toFixed(0), r.plantedSurvived.toFixed(0), r.events.join(';')].join(','));
+    return [head.join(',')].concat(rows).join('\n');
+  }
+  function copyCsv() {
+    const text = csv(); const ta = $('csvOut'); ta.value = text;
+    const fallback = () => { ta.hidden = false; ta.focus(); ta.select(); $('csvStatus').textContent = 'Select all and copy the data below.'; };
+    try {
+      navigator.clipboard.writeText(text).then(() => { $('csvStatus').textContent = `Copied ${state.run.years.length} rows. Paste into a spreadsheet.`; }, fallback);
+    } catch (e) { fallback(); }
+  }
+
+  /* ---------- wiring ---------- */
+  function init() {
+    const saved = load('settings');
+    if (saved) { if (saved.role && ROLES[saved.role]) state.role = saved.role; }
+    $('role').value = state.role;
+    buildOptions(); buildParams();
+    document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => preset(b.dataset.preset)));
+    $('runYear').addEventListener('click', fundYear);
+    $('runAll').addEventListener('click', runToEnd);
+    $('reset').addEventListener('click', resetRun);
+    $('role').addEventListener('change', e => { state.role = e.target.value; store('settings', { role: state.role }); renderScores(); });
+    $('horizon').addEventListener('change', e => { state.horizon = +e.target.value; if (state.cur > state.horizon) { state.cur = state.horizon; state.plans.length = state.horizon; } state.band = null; buildPred(); recompute(); });
+    $('events').addEventListener('change', e => { state.events = e.target.checked; state.band = null; recompute(); });
+    $('newSeed').addEventListener('click', () => { state.seed = 1 + Math.floor(Math.random() * 9999); state.band = null; recompute(); });
+    $('pin').addEventListener('click', () => { if (state.cur === 0) { $('pinList').textContent = 'Fund at least one year first.'; return; } if (state.pins.length >= 3) state.pins.shift(); const a = state.plans.slice(0, state.cur); const label = a.every(x => allocLabel(x) === allocLabel(a[0])) ? allocLabel(a[0]) : 'mixed plan over ' + a.length + ' years'; state.pins.push({ years: state.run.years.map(r => Object.assign({}, r)), label }); renderControls(); renderCharts(); });
+    $('clearPins').addEventListener('click', () => { state.pins = []; renderControls(); renderCharts(); });
+    $('reps').addEventListener('click', runReplicates);
+    $('clearReps').addEventListener('click', () => { state.band = null; $('repText').textContent = ''; renderCharts(); });
+    $('resetParams').addEventListener('click', () => { state.params = {}; buildParams(); syncAllocUI(); state.band = null; recompute(); });
+    $('copyCsv').addEventListener('click', copyCsv);
+    state.run = M.simulate(() => null, simParams({ years: 0 }));
+    buildPred();
+    renderAll();
+    let t; const onResize = () => { clearTimeout(t); t = setTimeout(() => { renderMap(); renderCharts(); }, 120); };
+    if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(document.querySelector('.viz')); else window.addEventListener('resize', onResize);
+    const mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', () => renderMap());
+    new MutationObserver(() => renderMap()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => renderMap());
+  }
+  init();
+})();
+</script>
+
+</body>
+</html>
